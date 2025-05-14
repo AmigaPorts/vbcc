@@ -3384,17 +3384,17 @@ int init_cg(void)
       declare_builtin("_uint64toflt64",DOUBLE,UNSIGNED|LLONG,pd0d1,0,0,1,0);
     }
     {
-      char *asm;
+      char *xasm;
       declare_builtin("_divs",LONG,LONG,d0,LONG,d1,1,0);
       declare_builtin("_divu",LONG,LONG,d0,LONG,d1,1,0);
 #define SMODS "\tjsr\t__divs\n\tmove.l\td1,d0"
 #define SMODU "\tjsr\t__divu\n\tmove.l\td1,d0"
-      asm=mymalloc(strlen(SMODS)+1);
-      strcpy(asm,SMODS);
-      declare_builtin("_mods",LONG,LONG,d0,LONG,d1,1,asm);
-      asm=mymalloc(strlen(SMODU)+1);
-      strcpy(asm,SMODU);
-      declare_builtin("_modu",LONG,LONG,d0,LONG,d1,1,asm);
+      xasm=mymalloc(strlen(SMODS)+1);
+      strcpy(xasm,SMODS);
+      declare_builtin("_mods",LONG,LONG,d0,LONG,d1,1,xasm);
+      xasm=mymalloc(strlen(SMODU)+1);
+      strcpy(xasm,SMODU);
+      declare_builtin("_modu",LONG,LONG,d0,LONG,d1,1,xasm);
     }
     declare_builtin("_lshint64",LLONG,LLONG,0,INT,0,1,0);
     declare_builtin("_rshsint64",LLONG,LLONG,0,INT,0,1,0);

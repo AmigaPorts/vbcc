@@ -3555,7 +3555,7 @@ const_list *designator(type *t,const_list *cl)
 }
 
 /* declare a builtin function with up to two scalar arguments */
-Var *declare_builtin(char *name,int ztyp,int q1typ,int q1reg,int q2typ,int q2reg,int nosidefx,char *asm)
+Var *declare_builtin(char *name,int ztyp,int q1typ,int q1reg,int q2typ,int q2reg,int nosidefx,char *xasm)
 {
   struct_declaration *sd;
   type *t;
@@ -3589,9 +3589,9 @@ Var *declare_builtin(char *name,int ztyp,int q1typ,int q1reg,int q2typ,int q2reg
     t->next->flags=ztyp;
     v=add_var(name,t,EXTERN,0);
     v->flags|=BUILTIN;
-    if(asm||nosidefx){
+    if(xasm||nosidefx){
       v->fi=new_fi();
-      if(asm) v->fi->inline_asm=asm;
+      if(xasm) v->fi->inline_asm=xasm;
       if(nosidefx){
 	v->fi->call_cnt=v->fi->use_cnt=v->fi->change_cnt=0;
 	v->fi->flags=ALL_CALLS|ALL_USES|ALL_MODS|ALWAYS_RETURNS|NOSIDEFX;

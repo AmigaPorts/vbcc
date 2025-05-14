@@ -723,7 +723,7 @@ extern int is_volatile_obj(obj *);
 extern int is_volatile_ic(IC *);
 extern case_table *calc_case_table(IC *,double);
 int calc_regs(IC *,int);
-Var *declare_builtin(char *name,int ztyp,int q1typ,int q1reg,int q2typ,int q2reg,int nosidefx,char *asm);
+Var *declare_builtin(char *name,int ztyp,int q1typ,int q1reg,int q2typ,int q2reg,int nosidefx,char *xasm);
 extern void emit_jump_table(FILE *,case_table *,char *,char *,int);
 extern void optimize(long, Var *);
 int bvcmp(bvtype *dest,bvtype *src,size_t len);
