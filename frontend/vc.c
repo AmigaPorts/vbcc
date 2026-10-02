@@ -12,6 +12,10 @@
 #include <windows.h>
 #endif
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
 #ifdef AMIGA
 #pragma amiga-align
 #ifdef __amigaos4__
@@ -271,6 +275,23 @@ static int read_config(const char *cfg_name)
         free(name);
       }
     }
+#ifdef __APPLE__
+    if(!file){
+        uint32_t path_size=0;
+        _NSGetExecutablePath(NULL,&path_size);
+        name=malloc((size_t)path_size+strlen(cfg_name)+sizeof(".config"));
+        if(!name){printf(nomem);raus(EXIT_FAILURE);}
+        if(_NSGetExecutablePath(name,&path_size)==0 && (p=strrchr(name,'/'))){
+            strcpy(p+1,cfg_name);
+            file=fopen(name,"r");
+            if(!file){
+                strcat(name,".config");
+                file=fopen(name,"r");
+            }
+        }
+        free(name);
+    }
+#endif
 #if defined(__CYGWIN__) || defined (__linux__)
     if (!file) {
                char buf[1040], *p;
