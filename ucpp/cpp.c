@@ -1952,8 +1952,8 @@ void init_tables(int with_assertions)
 	strftime(compile_time, 12, "\"%H:%M:%S\"", ct);
 	strftime(compile_date, 24, "\"%b %d %Y\"", ct);
 #endif
-  sprintf(compile_adate,"\"(%02d.%02d.%02d)\"",
-          ct->tm_mday,ct->tm_mon+1,ct->tm_year%100);
+  sprintf(compile_adate,"\"(%02d.%02d.%04d)\"",
+          ct->tm_mday,ct->tm_mon+1,ct->tm_year+1900);
   init_macros();
 	if (with_assertions) init_assertions();
 	init_found_files();
