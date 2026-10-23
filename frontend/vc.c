@@ -295,11 +295,16 @@ static int read_config(const char *cfg_name)
 #if defined(__CYGWIN__) || defined (__linux__)
     if (!file) {
                char buf[1040], *p;
+               long n;
 #ifdef __CYGWIN__
-               GetModuleFileNameA(0, buf, 1023);
+               n = GetModuleFileNameA(0, buf, 1023);
 #else
-               readlink( "/proc/self/exe", buf, 1023);
+               n = readlink( "/proc/self/exe", buf, 1023);
 #endif
+               /* readlink() does not NUL-terminate, and buf is not
+                  cleared: without this the directory is spliced with
+                  whatever the stack held. */
+               buf[n > 0 ? n : 0] = 0;
                for (p = buf + strlen(buf); p > buf;) {
                        --p;
                        if (*p == '/' || *p == '\\') {
@@ -307,11 +312,13 @@ static int read_config(const char *cfg_name)
                                break;
                        }
                }
-               strcat(buf, cfg_name);
-               file=fopen(buf, "r");
-               if (!file) {
-            	   strcat(buf, ".config");
+               if (n > 0 && strlen(buf) + strlen(cfg_name) + sizeof(".config") <= sizeof(buf)) {
+                   strcat(buf, cfg_name);
                    file=fopen(buf, "r");
+                   if (!file) {
+                       strcat(buf, ".config");
+                       file=fopen(buf, "r");
+                   }
                }
     }
 #endif
