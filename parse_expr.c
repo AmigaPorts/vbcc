@@ -1,9 +1,11 @@
-/*  $VER: vbcc (parse_expr.c) $Revision: 1.22 $  */
+/*  $VER: vbcc (parse_expr.c) $Revision: 1.28 $  */
 
 #include "vbcc_cpp.h"
 #include "vbc.h"
 
 static char FILE_[]=__FILE__;
+
+extern int no_alg_opt;
 
 np new_node(void)
 {
@@ -12,6 +14,7 @@ np new_node(void)
   p->lvalue=0;
   p->sidefx=0;
   p->ntyp=0;
+  p->otype=0;
   p->left=0;
   p->right=0;
   p->alist=0;
@@ -425,11 +428,11 @@ np unary_expression(void)
 	  else
 	    error(57);
 	  if(ctok->type!=NAME) error(76);
-	  if(t->flags!=STRUCT){
+	  if(t->flags!=STRUCT&&t->flags!=UNION){
 	    error(310);
 	    vumax=ul2zum(0UL);
 	  }else
-	    vumax=zm2zum(struct_offset(t->exact,ctok->name));
+	    vumax=zm2zum(struct_offset(t->exact,ctok->name,t->flags));
 	  next_token();
 	  if(HAVE_INT_SIZET)
 	    new->val.vuint=zum2zui(vumax);
@@ -461,6 +464,7 @@ np unary_expression(void)
 	if(op==OFFSETOF) error(0);
 	killsp();
 	tree=unary_expression();
+	no_alg_opt=1;
 	if(!tree||!type_expression(tree,0)){
 	  if(op==SIZEOF){
 	    if(HAVE_INT_SIZET)
@@ -496,6 +500,7 @@ np unary_expression(void)
 	      new->val.vint=zm2zi(l2zm(tree->ntyp->flags));
 	  }
 	}
+	no_alg_opt=0;
 	if(tree) free_expression(tree);killsp();
       }
       return new;
@@ -802,6 +807,7 @@ np constant_expression(void)
   np new; zldouble db;
   zumax value,zbase,digit;unsigned long base=10,t;
   char *s,*merk;int warned=0,tm=0;
+  union atyps v;
   merk=s=ctok->name;
   value=ul2zum(0L);
   new=new_node();
@@ -812,7 +818,9 @@ np constant_expression(void)
   new->sidefx=0;
   if(*s=='0'){
     s++;
-    if(*s=='x'||*s=='X'){s++;base=16;} else base=8;
+    if(*s=='x'||*s=='X'){s++;base=16;}
+    else if(!nobins&&(*s=='b'||*s=='B')) {s++;base=2;}
+    else base=8;
   }
   zbase=ul2zum(base);
   if(*s>='0'&&*s<='9') t=*s-'0'; 
@@ -891,10 +899,13 @@ np constant_expression(void)
     }
     s++;
   }
-  if(*s=='.'||*s=='e'||*s=='E'){
+  if(*s=='.'||*s=='e'||*s=='E'||*s=='p'||*s=='P'){
+    int hex=0;
+    if(c99&&*merk=='0'&&(merk[1]=='x'||merk[1]=='X'))
+      hex=1;
     /*  Fliesskommakonstante, ignoriert vorher berechneten Wert, falls er   */
     /*  nicht dezimal und nicht 0 war (da er dann oktal war)                */
-    if(*merk=='0'&&!zumeqto(value,ul2zum(0UL))){
+    if(*merk=='0'&&!zumeqto(value,ul2zum(0UL))&&hex==0){
       value=ul2zum(0UL);zbase=ul2zum(10UL);
       while(*merk>='0'&&*merk<='9'){
 	digit=ul2zum((unsigned long)(*merk-'0'));
@@ -909,23 +920,44 @@ np constant_expression(void)
       zldouble zdiv,zbased,zsum,digit;
       int cnt=0;
       s++;
-      zbased=d2zld(10.0);zdiv=d2zld(1.0);zsum=d2zld(0.0);
-      while(*s>='0'&&*s<='9'){
-        if (cnt<35){
-	  cnt++;
-          digit=d2zld((double)(*s-'0'));
-          zsum=zldadd(zldmult(zsum,zbased),digit);
-          zdiv=zldmult(zdiv,zbased);
-        }
-        s++;
+      if(hex){
+	zbased=d2zld(16.0);zdiv=d2zld(1.0);zsum=d2zld(0.0);
+	while((*s>='0'&&*s<='9')||(*s>='a'&&*s<='f')||(*s>='A'&&*s<='F')){
+	  if (cnt<35){
+	    cnt++;
+	    if(*s>='0'&&*s<='9') digit=d2zld((double)(*s-'0'));
+	    else if(*s>='a'&&*s<='f') digit=d2zld((double)(*s-'a'+10));
+	    else if(*s>='A'&&*s<='F') digit=d2zld((double)(*s-'A'+10));
+	    else ierror(0);
+	    zsum=zldadd(zldmult(zsum,zbased),digit);
+	    zdiv=zldmult(zdiv,zbased);
+	  }
+	  s++;
+	}
+      }else{
+	zbased=d2zld(10.0);zdiv=d2zld(1.0);zsum=d2zld(0.0);
+	while(*s>='0'&&*s<='9'){
+	  if (cnt<35){
+	    cnt++;
+	    digit=d2zld((double)(*s-'0'));
+	    zsum=zldadd(zldmult(zsum,zbased),digit);
+	    zdiv=zldmult(zdiv,zbased);
+	  }
+	  s++;
+	}
       }
       db=zldadd(db,zlddiv(zsum,zdiv));
       
     }
-    if(*s=='e'||*s=='E'){
+    if(*s=='e'||*s=='E'||*s=='p'||*s=='P'){
       /*  Exponentialdarstellung  */
       int exp,vorz,i;zldouble zbased;
-      zbased=d2zld((double)10);
+      if(*s=='e'||*s=='E'){
+	zbased=d2zld((double)10);
+      }else{
+	if(!hex) error(75);
+	zbased=d2zld((double)2);
+      }
       s++;
       if(*s=='-'){
 	s++;vorz=-1;
@@ -938,7 +970,8 @@ np constant_expression(void)
 	if(vorz>0) db=zldmult(db,zbased);
 	else   db=zlddiv(db,zbased);
       }
-    }
+    }else
+      if(hex) error(75);
     new->ntyp->flags=DOUBLE;
     if(*s=='f'||*s=='F'){
       new->ntyp->flags=FLOAT;s++;
@@ -977,17 +1010,17 @@ np constant_expression(void)
   }
 
   if(*s) error(232);
-  
-  if(new->ntyp->flags==FLOAT) new->val.vfloat=zld2zf(db);
-  else if(new->ntyp->flags==DOUBLE) new->val.vdouble=zld2zd(db);
-  else if(new->ntyp->flags==LDOUBLE) new->val.vldouble=db;
-  else if(new->ntyp->flags==INT) new->val.vint=zm2zi(zum2zm(value));
-  else if(new->ntyp->flags==(UNSIGNED|INT)) new->val.vuint=zum2zui(value);
-  else if(new->ntyp->flags==LONG) new->val.vlong=zm2zl(zum2zm(value));
-  else if(new->ntyp->flags==(UNSIGNED|LONG)) new->val.vulong=zum2zul(value);
-  else if(new->ntyp->flags==LLONG) new->val.vllong=zm2zll(zum2zm(value));
-  else if(new->ntyp->flags==(UNSIGNED|LLONG)) new->val.vullong=zum2zull(value);
-  else ierror(0);
+
+  tm=new->ntyp->flags;
+  if(ISFLOAT(tm)){
+    v.vldouble=db;
+    eval_const(&v,LDOUBLE);
+  }else{
+    v.vumax=value;
+    eval_const(&v,(UNSIGNED|MAXINT));
+  }
+  insert_const(&new->val,tm);
+
   next_token();
   return new;
 }
@@ -1035,7 +1068,13 @@ void free_alist(argument_list *p)
 void free_expression(np p)
 /*  Gibt expression mit allen Typen etc. frei  */
 {
+  static int lasterrors;
   if(!p) return;
+  /* do not try to free an expression if errors were found */
+  if(errors>lasterrors){
+    lasterrors=errors;
+    return;
+  }
   if(p->flags==ASSIGNOP){
     if(!p->right){ierror(0);return;}
     if(p->right->left==p->left)  p->left=0;

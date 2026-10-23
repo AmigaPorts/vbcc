@@ -1,4 +1,4 @@
-/*  $VER: vbcc (m68k/machine.c) $Revision: 1.139 $     */
+/*  $VER: vbcc (m68k/machine.c) $Revision: 1.150 $     */
 /*  Code generator for Motorola 680x0 CPUs. Supports 68000-68060+68881/2    */
 /*  and ColdFire.                                                           */
 /*  vasm, PhxAss and the GNU assembler is supported.                        */
@@ -165,6 +165,7 @@ static int stack_valid;
 static char *codename,*bssname,*dataname;
 static char *m_bssname,*m_dataname;
 static char *rprefix;
+static int disabledclr;
 
 static void emit_obj(FILE *,obj *,int);
 static IC *do_refs(FILE *,IC *);
@@ -278,6 +279,18 @@ static int vsec(FILE *f,Var *v)
   emit(f,"\t%ssection\t\"DONTMERGE_%s.%s.%ld\"%s%s\n",GAS?".":"",type,v->identifier,v->storage_class==STATIC/*&&!ISFUNC(v->vtyp->flags)*/?(long)zm2l(v->offset):0L,GAS?"":",",GAS?"":type);
   if(f) section=SPECIAL;
   return 1;
+}
+
+static void move_freereg(IC *to,IC *fr)
+{
+  int r=fr->q1.reg,alloc=0;
+  IC *p=fr->next;
+  while(p!=to){
+    if(p->code==ALLOCREG&&p->q1.reg==r){alloc=1;p->code=NOP;p->q1.flags=0;}
+    if(p->code==FREEREG&&p->q1.reg==r){alloc=0;p->code=NOP;p->q1.flags=0;}
+    p=p->next;
+  }
+  if(alloc) {fr->code=NOP;fr->q1.flags=0;} else move_IC(to,fr);
 }
 
 static int special_section(FILE *f,Var *v)
@@ -673,6 +686,10 @@ static void pr(FILE *f,IC *p)
   if((pushedreg&12)&&(p->code==TEST||p->code==COMPARE||p->code==SETRETURN)){
     s="m";
     if(!GAS&&!PHXASS) emit(f,"\topt\tom-\n");
+  }
+  if(disabledclr){
+    disabledclr=0;
+    if(!GAS&&!PHXASS) emit(f,"\topt\toc+\n");
   }
   for(i=MAXR;i>0;i--){
     if(regs[i]==2) regs[i]=0;
@@ -1339,7 +1356,7 @@ static void mod_reg(int r)
 /* return non-zero if IC is implemented by a function call */
 static int islibcall(IC *p)
 {
-  int c=p->code,t=p->typf/NQ;
+  int c=p->code,t=p->typf&NQ;
   if((c==DIV||c==MOD)&&CPU<68020)
     return 1;
   if(t==LLONG&&c!=ADD&&c!=SUB&&c!=OR&&c!=AND&&c!=XOR&&c!=COMPARE)
@@ -1604,11 +1621,11 @@ static int new_peephole(IC *first)
 		am->basereg=base;
 		am->dist=zm2l(of);
 		am->skal=0;
-		if(free_base) move_IC(use,free_base);
+		if(free_base) move_freereg(use,free_base);
 		if(idx_ic){
 		  am->dreg=idx;
 		  if(ISHWORD(idx_ic->typf)) am->dreg|=128;
-		  if(free_idx) move_IC(use,free_idx);
+		  if(free_idx) move_freereg(use,free_idx);
 		  idx_ic->code=NOP;
 		  idx_ic->q1.flags=idx_ic->q2.flags=idx_ic->z.flags=0;
 		}else
@@ -1722,10 +1739,12 @@ static int new_peephole(IC *first)
 		off->q1.flags=off->q2.flags=off->z.flags=0;
 	      }
 	      if(!use) ierror(0);
-	      if(free_idx) move_IC(use,free_idx);
-	      if(free_base) move_IC(use,free_base);
+	      if(free_idx) move_freereg(use,free_idx);
+	      if(free_base) move_freereg(use,free_base);
+#if 0
 	      if(free_idx&&use->next!=free_idx&&use->next->next!=free_idx) ierror(0);
 	      if(free_base&&use->next!=free_base&&use->next->next!=free_base) ierror(0);
+#endif	   
 	      if(!(o->flags&DREFOBJ)){
 		o->flags|=DREFOBJ;
 		if(use->code==PUSH)
@@ -1795,7 +1814,8 @@ static int new_peephole(IC *first)
 	    if(use&&((c2==FREEREG&&p2->q1.reg==r)||((p2->z.flags&(REG|DREFOBJ))==REG&&p2->z.reg==r))){
 	      amuse->skal=ul;
 	      if(!src_mod&&isreg(q1)&&p->q1.reg>=d0&&p->q1.reg<=d7){
-		amuse->dreg=p->q1.reg;
+		amuse->dreg&=128;
+		amuse->dreg|=p->q1.reg;
 		p->code=NOP;
 		p->q1.flags=p->q2.flags=p->z.flags=0;
 	      }else{
@@ -1803,8 +1823,8 @@ static int new_peephole(IC *first)
 		p->q2.flags=0;
 		p->q2.val.vmax=sizetab[p->typf&NQ];
 	      }
-	      if(free_src) move_IC(use,free_src);
-	      if(free_rsrc) move_IC(use,free_rsrc);
+	      if(free_src) move_freereg(use,free_src);
+	      if(free_rsrc) move_freereg(use,free_rsrc);
 	      break;
 	    }
 	    if(c2==CALL||c2==LABEL||(c2>=BEQ&&c2<=BRA)) break;
@@ -1821,14 +1841,14 @@ static int new_peephole(IC *first)
       }
     }	    
   }
-
   /* another pass to remove unnecessary ALLOCREGs */
   for(p=first;p;p=p->next){
     if(p->code==ALLOCREG){
       r=p->q1.reg;
       for(p2=p->next;p2;p2=p2->next){
 	c2=p2->code;
-	if(c2==ALLOCREG&&p2->q1.reg==r) ierror(0);
+	if(c2==ALLOCREG&&p2->q1.reg==r)
+	  ierror(0);
 	if(c2==FREEREG&&p2->q1.reg==r){
 	  p->code=NOP;
 	  p->q1.flags=0;
@@ -2376,11 +2396,14 @@ static void assign(FILE *f,IC *p,obj *q,obj *z,int c,long size,int t)
     emit(f,"\n");    
     return;
   }
-  if((size==1||size==2||size==4)&&!ISARRAY(t)&&(p->code!=PUSH||zm2l(p->z.val.vmax)!=3)&&((t&NQ)!=CHAR||size==1)){
+  if((size==1||size==2||size==4)&&
+     (!ISARRAY(t))&&
+     (p->code!=PUSH||zm2l(p->z.val.vmax)!=3)&&
+     ((t&NQ)!=CHAR||size==1||p->typf2>=2)){
     if(ISSTRUCT(t)||ISUNION(t)){
       if(p->code==PUSH&&!zmeqto(p->q2.val.vmax,p->z.val.vmax)){
 	if(size!=4&&size!=2) ierror(size);
-	emit(f,"\tsubq.%s\t#%d,%s\n",cf?"l":"w",size,mregnames[sp]);
+	emit(f,"\tsubq.%s\t#%d,%s\n",cf?"l":"w",(int)size,mregnames[sp]);
 	push(size);
 	size=zm2l(p->z.val.vmax);
 	if(size!=1&&size!=2) ierror(0);
@@ -2388,15 +2411,14 @@ static void assign(FILE *f,IC *p,obj *q,obj *z,int c,long size,int t)
 	emit_obj(f,q,(size==1?CHAR:SHORT));
 	emit(f,",(%s)\n",mregnames[sp]);
 	return;
-      }else{
-	if(size==1)
-	  t=CHAR;
-	else if(size==2)
-	  t=SHORT;
-	else
-	  t=LONG;
       }
     }
+    if(size==1)
+      t=CHAR;
+    else if(size==2)
+      t=SHORT;
+    else
+      t=LONG;
     if(c==ASSIGN){move(f,q,0,z,0,t);return;}
     /*  Sonderfall pea  */
     if((q->flags&VARADR)&&c==PUSH){
@@ -2419,10 +2441,8 @@ static void assign(FILE *f,IC *p,obj *q,obj *z,int c,long size,int t)
     int a1,a2,qreg,zreg,dreg,loops,scratch=0,down=0;char *cpstr;
     long s=size,osize=size;
     IC *m;
-    for(m=p->next;m&&m->code==FREEREG;m=m->next){
-      if(q&&m->q1.reg==q->reg) scratch|=1;
-      if(z&&m->q1.reg==z->reg) scratch|=2;
-    }
+    if(q&&scratchreg(q->reg,p)) scratch|=1;
+    if(z&&scratchreg(z->reg,p)) scratch|=2;
     a1=alignment(q);
     if(c!=PUSH)  a2=alignment(z); else a2=0;
     if(a1<0||a2<0) {a1=1;a2=2;}
@@ -3935,6 +3955,10 @@ void gen_code(FILE *f,IC *p,Var *v,zmax offset)
       }
     }
 #endif
+    if(CPU<=68000&&is_volatile_obj(&p->z)){
+      if(!GAS&&!PHXASS) emit(f,"\topt\toc-\n");
+      disabledclr=1;
+    }
     if(c==COMPARE&&isconst(q2)&&!cf&&(t&NQ)!=LLONG){
       case_table *ct=calc_case_table(p,JUMP_TABLE_DENSITY);
       IC *p2;
@@ -4846,7 +4870,7 @@ void gen_code(FILE *f,IC *p,Var *v,zmax offset)
 	emit(f,",%s\n",mregnames[zreg]);
 	continue;
       }
-      if((p->q2.flags&(KONST|VARADR))&&!(p->q1.flags&(KONST|VARADR))&&(!cf||isreg(q1))){
+      if(!(p->q2.flags&DREFOBJ)&&(p->q2.flags&(KONST|VARADR))&&!(p->q1.flags&(KONST|VARADR))&&(!cf||isreg(q1))){
 	emit(f,"\tcmp.%c\t",x_t[t&NQ]);emit_obj(f,&p->q2,t);
 	emit(f,",");emit_obj(f,&p->q1,t);emit(f,"\n");
 	continue;
@@ -5243,7 +5267,7 @@ void gen_code(FILE *f,IC *p,Var *v,zmax offset)
 	  if(isreg(q1)&&p->q1.reg==zreg)
 	    emit(f,"\ttst.%c\t%s\n",x_t[t&NQ],mregnames[zreg]);
 	  emit(f,"\tbge\t%s%d\n",labprefix,++label);
-	  emit(f,"\tadd%s.%c\t#%ld,%s\n",(l<=7?"q":""),x_t[t&NQ],l,mregnames[zreg]);
+	  emit(f,"\tadd%s.%c\t#%lu,%s\n",(l<=7?"q":""),x_t[t&NQ],l,mregnames[zreg]);
 	  emit(f,"%s%d:\n",labprefix,label);
 	}
 	if(c==RSHIFT&&!(t&UNSIGNED))
@@ -5292,9 +5316,9 @@ void init_db(FILE *f)
 {
   if(!HUNKDEBUG){
     if(GAS)
-      dwarf2_setup(sizetab[POINTER],".byte",".2byte",".4byte",".4byte","l","_",".section");
+      dwarf2_setup(sizetab[POINTER],".byte",".2byte",".4byte",".4byte",labprefix,idprefix,".section");
     else
-      dwarf2_setup(sizetab[POINTER],"dc.b","dc.w","dc.l","dc.l","l","_","section");
+      dwarf2_setup(sizetab[POINTER],"dc.b","dc.w","dc.l","dc.l",labprefix,idprefix,"section");
     dwarf2_print_comp_unit_header(f);
   }
 }

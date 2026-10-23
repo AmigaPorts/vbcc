@@ -36,12 +36,12 @@ struct HT {
 	struct hash_item **lists;
 	int nb_lists;
 	int (*cmpdata)(void *, void *);
-	int (*hash)(void *);
+	size_t (*hash)(void *);
 	void (*deldata)(void *);
 };
 
-int hash_string(char *);
-struct HT *newHT(int, int (*)(void *, void *), int (*)(void *),
+//unsigned int hash_string(char *);
+struct HT *newHT(int, int (*)(void *, void *), size_t (*)(void *),
 	void (*)(void *));
 void *putHT(struct HT *, void *);
 void *forceputHT(struct HT *, void *);
@@ -52,7 +52,7 @@ void killHT(struct HT *);
 void saveHT(struct HT *, void **);
 void restoreHT(struct HT *, void **);
 void scanHT(struct HT *, void (*)(void *));
-int hash_struct(void *);
+size_t hash_struct(void *);
 int cmp_struct(void *, void *);
 
 #endif

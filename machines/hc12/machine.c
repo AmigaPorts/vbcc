@@ -789,7 +789,7 @@ static void gen_pop(FILE *f,long l)
     BSET(regs_modified,iy);
 #endif
   }else{
-    emit(f,"\tleas\t%u,%s\n",SGN16(l),regnames[sp]);
+    emit(f,"\tleas\t%ld,%s\n",SGN16(l),regnames[sp]);
   }
   pop(l);
 }
@@ -1915,9 +1915,10 @@ void gen_var_head(FILE *f,struct Var *v)
     emit(f,"\t.size\t%s%ld,%ld\n",labprefix,zm2l(v->offset),zm2l(szof(v->vtyp)));
     if(v->clist||section==SPECIAL)
       emit(f,"%s%ld:\n",labprefix,zm2l(v->offset));
-    else
+    else{
       emit(f,"\t.lcomm\t%s%ld,",labprefix,zm2l(v->offset));
-    newobj=1; 
+      newobj=1; 
+    }
   }
   if(v->storage_class==EXTERN){
     if(v->flags&(DEFINED|TENTATIVE)){
@@ -1939,9 +1940,10 @@ void gen_var_head(FILE *f,struct Var *v)
       emit(f,"\t.size\t%s%s,%ld\n",idprefix,v->identifier,zm2l(szof(v->vtyp)));
       if(v->clist||section==SPECIAL)
         emit(f,"%s%s:\n",idprefix,v->identifier);
-      else
+      else{
         emit(f,"\t.global\t%s%s\n\t.lcomm\t%s%s,",idprefix,v->identifier,idprefix,v->identifier);
-      newobj=1;   
+	newobj=1;   
+      }
     }
   }
 }
@@ -2853,9 +2855,9 @@ void gen_code(FILE *f,struct IC *fp,struct Var *v,zmax offset)
 	    pd=(CPU!=6812&&cnt<=255)?1:2;
 	  }
 	  if(CPU!=6812&&cnt<=255)
-	    emit(f,"\tldb\t#%lu\n",cnt);
+	    emit(f,"\tldb\t#%u\n",(unsigned int)cnt);
 	  else
-	    emit(f,"\tldd\t#%lu\n",cnt);
+	    emit(f,"\tldd\t#%u\n",(unsigned int)cnt);
 	  cc=0;
 #if 0
 	  if(CPU!=6812&&((!regsa[iu]&&regs[iu])||drel)){
@@ -2973,7 +2975,7 @@ void gen_code(FILE *f,struct IC *fp,struct Var *v,zmax offset)
 	}
 	continue;
       }
-      if(((regs[acc]&&regs[ix])||(t&NQ)==CHAR)&&(p->q1.flags&KONST)&&!isreg(z)){
+      if(((regs[acc]&&regs[ix])||(t&NQ)==CHAR)&&((p->q1.flags&(DREFOBJ|KONST))==KONST)&&!isreg(z)){
 	eval_const(&p->q1.val,t);
 	if(zmeqto(vmax,l2zm(0L))&&zumeqto(vumax,ul2zum(0UL))&&((p->z.flags&(REG|DREFOBJ))!=DREFOBJ||(t&NQ)==CHAR)&&(!p->z.am||p->z.am->flags!=ACC_IND||(t&NQ)==CHAR)){
 	  emit(f,"\tclr\t");

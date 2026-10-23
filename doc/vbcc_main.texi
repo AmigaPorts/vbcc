@@ -208,6 +208,7 @@ or additional options.
 @item  Inline-assembly functions are not recognized.
 @item  Assignments between pointers to <type> and pointers
                 to unsigned <type> will cause warnings.
+@item  Binary constants are not allowed.
 @end itemize
 
     @item -maxerrors=n
@@ -245,6 +246,9 @@ or additional options.
     @item -no-trigraphs
                 Do not recognize trigraphs (not ISO conforming).
 
+    @item -no-binary-constants
+                Do not allow binary constants.
+
     @item -E
                 Write the preprocessor output to <file>.i.
 
@@ -260,6 +264,8 @@ or additional options.
                 Use the specified filename as target in the generated dependency
                 file instead of basing it on the input file name.
 
+    @item -depfile=<file>
+		Write the dependencies to <file>.
     @item -reserve-reg=<register>
                 Reserve that register not to be used by the backend.
                 This option is dangerous and must only be used for registers
@@ -323,6 +329,11 @@ or additional options.
                 Perform mask optimizations on suitable library function. This
                 will create calls to optimized versions of e.g. the printf/scanf
                 family of functions.
+
+    @item -no-array-idx-opt
+                Do not optimize array index computations based on the size of the
+                array type. This can help with some broken programs using out-of-bounds
+                indices in (usually inner) arrays.
 
 @end table
 
@@ -1775,6 +1786,16 @@ __entry __interrupt __section("vectab") void my_handler()
         type and the second a member of the structure type. The result
         will be a constant expression representing the offset of the
         specified member in the structure.
+
+@subsection @code{Binary Constants}
+Numbers can be specified in binary using a prefix of @code{0b} or {0B}. Allowed digits are @code{0} and
+@code{1}. Suffixes and type rules are the same as with hexadecimal numbers.
+
+@example
+        unsigned long mask = 0b111001;
+@end example
+
+This feature can be turned off using option @code{-no-binary-constants}.
 
 @node Specifying side-effects
 @subsection Specifying side-effects

@@ -117,6 +117,9 @@ Unix @command{cc}.
                 Add @file{path} to the library-search-path.
             This is passed through to the linker.
 
+    @item --<option>
+		Pass @file{-<option>} through to the linker.
+
     @item -static
                 Instruct the linker to link against static libraries.
                 This may override the default to link against dynamic

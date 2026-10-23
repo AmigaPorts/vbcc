@@ -1,4 +1,4 @@
-/*  $VER: vbcc (loop.c) $Revision: 1.19 $    */
+/*  $VER: vbcc (loop.c) $Revision: 1.23 $    */
 /*  schleifenorientierte Optimierungen  */
 
 #include "opt.h"
@@ -702,7 +702,10 @@ void frequency_reduction(flowgraph *start,flowgraph *end,flowgraph *head)
     memset(inloop,0,dsize);
     for(g=start;g;g=g->normalout){
       for(p=g->start;p;p=p->next){
-	if(p->defindex) BSET(inloop,p->defindex);
+	if(p->defindex){
+	  BSET(inloop,p->defindex);
+	  //bvunite(inloop,defs_gen[p->defindex],dsize);
+	}
 	if(p==g->end) break;
       }
       if(g==end) break;
@@ -1116,7 +1119,7 @@ void strength_reduction(flowgraph *start,flowgraph *end,flowgraph *head)
 	if((p->q1.flags&(VAR|VARADR))==VAR){
 	  i=p->q1.v->index;
 	  if(p->q1.flags&DREFOBJ) i+=vcount-rcount;
-	  if(ind_vars[i]){
+	  if(ind_vars[i]&&!compare_objs(&ind_vars[i]->z,&p->q1,p->typf)){
 	    k1=1;iv=i;
 	  }else if(def_invariant(i,-1))
 	    k1=2;
@@ -1127,7 +1130,7 @@ void strength_reduction(flowgraph *start,flowgraph *end,flowgraph *head)
 	if((p->q2.flags&(VAR|VARADR))==VAR){
 	  i=p->q2.v->index;
 	  if(p->q2.flags&DREFOBJ) i+=vcount-rcount;
-	  if(ind_vars[i]){
+	  if(ind_vars[i]&&!compare_objs(&ind_vars[i]->z,&p->q2,p->typf)){
 	    k2=1;iv=i;
 	  }else if(def_invariant(i,-1))
 	    k2=2;
@@ -1610,10 +1613,12 @@ int do_unroll(int donothing)
 	tptrdiff.flags=PTRDIFF_T(cmp->typf);
 	t=&tptrdiff;
       }else{
+	static type ttmp;
+	t=&ttmp;
 	if(cmp->q1.flags&VAR)
-	  t=cmp->q1.v->vtyp;
+	  t->flags=q1typ(cmp);
 	else
-	  t=cmp->q2.v->vtyp;
+	  t->flags=q2typ(cmp);
       }
       v=add_tmp_var(clone_typ(t));
       new=new_IC();

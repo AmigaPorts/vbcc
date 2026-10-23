@@ -1,4 +1,4 @@
-/*  $VER: vbcc (declaration.c) $Revision: 1.90 $    */
+/*  $VER: vbcc (declaration.c) $Revision: 1.96 $    */
 
 #include <string.h>
 #include <stdio.h>
@@ -157,7 +157,6 @@ int settyp(int typnew, int typold)
 }
 
 #define dsc if(storage_class) error(49); if(typ||type_qualifiers) error(50)
-#define XSIGNED 16384
 
 #ifdef HAVE_MISRA
 /* removed */
@@ -263,7 +262,7 @@ type *declaration_specifiers(void)
 /* removed */
 /* removed */
 /* removed */
-#endif        
+#endif
         if(ctok->type==LBRA){
           int bfoffset,bfsize,flex_array=0,cbfo=0;
 	  int scount;
@@ -332,7 +331,11 @@ type *declaration_specifiers(void)
 #endif
               if(tree) free_expression(tree);
             }else{
-              if(!ecpp&&*ident==0) error(53);
+              if(!c11&&!ecpp&&*ident==0){
+		freetyp(t);
+		error(53);
+		break;
+	      }
               cbfo=0;
             }
 #ifdef HAVE_ECPP
@@ -362,6 +365,11 @@ type *declaration_specifiers(void)
                 flex_array=1;
               }
             }
+	    if(ISSTRUCT(t->flags)){
+	      struct struct_declaration *s=t->exact;
+	      type *t=(*s->sl)[s->count-1].styp;
+	      if(ISARRAY(t->flags)&&zmeqto(t->size,Z0)) error(231);
+	    }
 	    if(ISARRAY(t->flags)&&t->dsize){
 	      error(352,sbuff);
 	    }
@@ -372,9 +380,12 @@ type *declaration_specifiers(void)
             }
             if(*ident!=0){
               int i=scount;
-              while(--i>=0)
+              while(--i>=0){
                 if(!strcmp((*sl)[i].identifier,ident))
                   error(16,ident);
+		if(c11&&*ident&&!*(*sl)[i].identifier&&(*sl)[i].styp->exact&&find_member(ident,(*sl)[i].styp->exact))
+		  error(16,ident);
+	      }
             }
 #ifdef HAVE_MISRA
 /* removed */
@@ -625,8 +636,8 @@ type *declaration_specifiers(void)
 /* removed */
 #endif
           ident=imerk;
-					add_sl(ssd,sl);
-					free(sl);
+	  add_sl(ssd,sl);
+	  free(sl);
           if(ctok->type!=RBRA) error(56); else next_token();
           new->flags=notdone|type_qualifiers;
         }
@@ -709,6 +720,16 @@ type *declaration_specifiers(void)
       }else if(!strcmp("void",ctok->name)){
         next_token();
         typ=settyp(VOID,typ);notdone=1;
+      }else if(!strcmp("_Bool",ctok->name)){
+#ifdef HAVE_MISRA
+/* removed */
+#endif
+	next_token();
+	if(type_qualifiers&(XSIGNED|UNSIGNED)) error(58);
+	if(typ) error(48);
+	typ=settyp(CHAR,typ);
+	type_qualifiers|=UNSIGNED|BOOLEAN;
+	notdone=1;
       }else if(!strcmp("char",ctok->name)){
 #ifdef HAVE_MISRA
 /* removed */
@@ -934,6 +955,7 @@ type *declaration_specifiers(void)
             free(new);
             new=clone_typ(v->vtyp);
             typ=settyp(new->flags,typ);
+
             notdone=1;
             next_token();
           }
@@ -1032,7 +1054,7 @@ type *declaration_specifiers(void)
     if(!ISINT(typ))
       error(58);
   new->flags=typ|type_qualifiers;
-  new->attr=attr;
+  add_attr(&new->attr,attr);
   return new;
 }
 
@@ -1460,6 +1482,7 @@ void init_sl(struct_list *sl){
 /* removed */
 #endif
 }
+
 void add_sl(struct_declaration *sd,struct_list (*sl)[])
 /*  Fuegt ein struct_list-Array in eine struct_declaration ein.     */
 /*  Das Array muss mind. sd->count Elements haben und wird kopiert. */
@@ -1649,11 +1672,14 @@ static void create_allocvl(Var *v)
       struct_declaration *sd=mymalloc(sizeof(*sd));
       t=new_typ();
       t->flags=FUNKT;
-
       t->next=new_typ();
       t->next->flags=POINTER_TYPE(&voidt);
       t->next->next=clone_typ(&voidt);
-      sd->count=0;
+      sd->count=1;
+      sd->sl=mymalloc(sizeof(struct_list));
+      (*sd->sl)[0].storage_class=AUTO;
+      (*sd->sl)[0].styp=clone_typ(&voidt);
+      (*sd->sl)[0].reg=0;
       t->exact=add_sd(sd,FUNKT);
       fv=add_var("__oldvlasp",t,EXTERN,0);
       fv->fi=new_fi();
@@ -1881,7 +1907,7 @@ void vla_jump_fix(void)
 	  /*printf("jump within the same context\n");*/
 	}else{
 	  if(vn[nest]){
-	    if(DEBUG&1) printf("have to set sp to %p\n",return_last_vlasp);
+	    if(DEBUG&1) printf("have to set sp to %p\n",(void*)return_last_vlasp);
 	    p->savedsp=return_last_vlasp;
 	  }else{
 	    int ndiff=nest-return_vla_nest-1;
@@ -2005,6 +2031,7 @@ Var *add_var(char *identifier, type *t, int storage_class,const_list *clist)
   struct_declaration *sd;
   static zmax paroffset;
   zmax al;
+
   /*if(*identifier==0) return;*/ /* sollte woanders bemaekelt werden */
   if(DEBUG&2) printf("add_var(): %s\n",identifier);
 #ifdef HAVE_TARGET_VARHOOK_PRE
@@ -2040,6 +2067,7 @@ Var *add_var(char *identifier, type *t, int storage_class,const_list *clist)
   new->tunit=last_tunit;
   new->inline_copy=0;
   new->index=-1;
+  new->ctyp=0;
 #ifdef HAVE_TARGET_ATTRIBUTES
   new->tattr=0;
 #endif
@@ -2791,6 +2819,7 @@ void var_declaration(void)
         while(ctok->type!=LBRA&&ctok->type!=SEMIC){next_token();killsp();}
       }
     }
+    if(nesting!=1){ error(32); leave_block();}
     if(!ecpp&&t->exact->count==0){
       struct_list sl[1];
       if(DEBUG&1) printf("prototype converted to (void)\n");
@@ -2895,7 +2924,8 @@ void var_declaration(void)
           freetyp((*t->exact->sl)[i].styp);
           (*t->exact->sl)[i].styp=0; /*  Prototype entfernen */
         }
-      }
+      }else if(((*t->exact->sl)[i].styp->flags&NQ)!=VOID)
+	error(365);
     }
     if(oldstyle) t->exact->count=0; /*  Prototype entfernen */
     /*        local_offset[1]=l2zm(0L);*/
@@ -3536,6 +3566,7 @@ const_list *designator(type *t,const_list *cl)
       error(53);
     }else{
       int i,n=-1;
+      /*printf("f1 %p\n",find_member(ctok->name,t->exact));*/
       for(i=0;i<t->exact->count;i++)
 	if(!strcmp((*t->exact->sl)[i].identifier,ctok->name)) n=i;
       if(n<0){
@@ -3544,10 +3575,9 @@ const_list *designator(type *t,const_list *cl)
       }
       next_token();
       killsp();
-
       if(!ISUNION(f)||!cl)
 	cl=insert_cl(cl,l2zm((long)n));
-
+      
       return cl;
     }
   }

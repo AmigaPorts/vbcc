@@ -1,4 +1,4 @@
-/*  $VER: vbcc (cse.c) $Revision: 1.11 $    */
+/*  $VER: vbcc (cse.c) $Revision: 1.12 $    */
 /*  verfuegbare Ausdruecke und common subexpression elimination */
 
 #include "opt.h"
@@ -135,7 +135,7 @@ int compare_exp(const void *a1,const void *a2)
     i1=p1->code; i2=p2->code;
     if(i1<i2) return -1;
     if(i1>i2) return 1;
-    i1=p1->typf&(NU|VOLATILE|SIGNED_CHARACTER); i2=p2->typf&(NU|VOLATILE|SIGNED_CHARACTER);
+    i1=p1->typf&(NU|VOLATILE|XSIGNED|BOOLEAN); i2=p2->typf&(NU|VOLATILE|XSIGNED|BOOLEAN);
     if(i1<i2) return -1;
     if(i1>i2) return 1;
     i1=compare_objs(&p1->q1,&p2->q1,q1typ(p1));

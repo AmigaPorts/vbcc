@@ -1,4 +1,4 @@
-/*  $VER: vbcc (opt.c) $Revision: 1.52 $    */
+/*  $VER: vbcc (opt.c) $Revision: 1.59 $    */
 /*  allgemeine Routinen fuer den Optimizer und Steuerung der einzelnen  */
 /*  Laeufe                                                              */
 
@@ -12,7 +12,7 @@ static char FILE_[]=__FILE__;
 /*  Sind use/change-Listen initialisiert?   */
 int have_alias;
 
-int static_cse=1,dref_cse=1;
+int static_cse=1,dref_cse=1,addr_vkonst=0;
 int no_eff_ics,early_eff_ics;
 
 #ifdef ALEX_REG
@@ -483,7 +483,7 @@ static void cnv_static(Var *v)
     v->offset=++label;
     v->flags|=(USEDASSOURCE|USEDASDEST|DEFINED|STATICAUTO);
     if(v->clist){free_clist(v->clist);v->clist=0;}
-    if(DEBUG&1024) printf("changing %s(%p) to static (L%ld)\n",v->identifier,v,zm2l(v->offset));
+    if(DEBUG&1024) printf("changing %s(%p) to static (L%ld)\n",v->identifier,(void*)v,zm2l(v->offset));
   }
 }
 
@@ -557,7 +557,14 @@ void recalc_offsets(flowgraph *g)
       if(used[i]&&(BTST(fg->av_in,i)||BTST(fg->av_out,i))){
 	BSET(used[i],b);
 	for(r=1;r<=MAXR;r++)
-	  if(fg->regv[r]&&fg->regv[r]->index==i) BCLR(used[i],b);
+	  if(fg->regv[r]&&fg->regv[r]->index==i){
+	    if(DEBUG&1024){
+	      if(exit_save(fg,r)) printf("block %d exit-save %s (%s)\n",b,regnames[r],vilist[i]->identifier);
+	      if(entry_load(fg,r)) printf("block %d entry-load %s (%s)\n",b,regnames[r],vilist[i]->identifier);
+	    }
+	    if(!exit_save(fg,r)&&!entry_load(fg,r))
+	      BCLR(used[i],b);
+	  }
       }
     }
     for(p=fg->start;p;p=p->next){
@@ -680,6 +687,13 @@ void recalc_offsets(flowgraph *g)
       bvintersect(tmp,used[b],bsize);
       if(!memcmp(tmp,empty,bsize)){
 	if(DEBUG&1024) printf("memory for %s(%p) and %s(%p) equal\n",vilist[i]->identifier,(void *)vilist[i],vilist[b]->identifier,(void *)vilist[b]);
+
+
+	if(DEBUG&1024){
+	  int idx;
+	  for(idx=0;idx<basic_blocks;idx++) printf("block %03d: %s %s\n",idx,BTST(used[i],idx)?"yes":"no ",BTST(used[b],idx)?"yes":"no ");
+	}
+
 	eqto[b]=i;
 	if(!zmleq(al[b],al[i])) al[i]=al[b];
 	if(!zmleq(sz[b],sz[i])) sz[i]=sz[b];
@@ -697,10 +711,10 @@ void recalc_offsets(flowgraph *g)
     for(i=0;i<vcount-rcount;i++){
       j=i;
       while((j=eqto[j])>=0){
-	if(!zmleq(sz[j],sz[i])){sz[i]=sz[j];b=1;j=i;if(DEBUG&1024) printf("lmset %d(%p) to sz %ld\n",i,vilist[i],zm2l(sz[i]));}
-	if(!zmleq(sz[i],sz[j])){sz[j]=sz[i];b=1;if(DEBUG&1024) printf("lmset %d(%p) to sz %ld\n",j,vilist[j],zm2l(sz[j]));}
-	if(!zmleq(al[j],al[i])){al[i]=al[j];b=1;j=i;if(DEBUG&1024) printf("lmset %d(%p) to al %ld\n",i,vilist[i],zm2l(al[i]));}
-	if(!zmleq(al[i],al[j])){al[j]=al[i];b=1;if(DEBUG&1024) printf("lmset %d(%p) to al %ld\n",j,vilist[j],zm2l(al[j]));}
+	if(!zmleq(sz[j],sz[i])){sz[i]=sz[j];b=1;j=i;if(DEBUG&1024) printf("lmset %d(%p) to sz %ld\n",i,(void*)vilist[i],zm2l(sz[i]));}
+	if(!zmleq(sz[i],sz[j])){sz[j]=sz[i];b=1;if(DEBUG&1024) printf("lmset %d(%p) to sz %ld\n",j,(void*)vilist[j],zm2l(sz[j]));}
+	if(!zmleq(al[j],al[i])){al[i]=al[j];b=1;j=i;if(DEBUG&1024) printf("lmset %d(%p) to al %ld\n",i,(void*)vilist[i],zm2l(al[i]));}
+	if(!zmleq(al[i],al[j])){al[j]=al[i];b=1;if(DEBUG&1024) printf("lmset %d(%p) to al %ld\n",j,(void*)vilist[j],zm2l(al[j]));}
 
       }
     }
@@ -728,9 +742,9 @@ void recalc_offsets(flowgraph *g)
 	  }while(used[j]&&(j=eqto[j])>=0);
 	  if(j<0) ierror(0);
 	  if(!zmleq(sz[i],sz[j])) 
-	    {printf("%d(%p) %d(%p) %ld %ld\n",i,vilist[i],j,vilist[j],zm2l(sz[i]),zm2l(sz[j]));ierror(0);}
+	    {printf("%d(%p) %d(%p) %ld %ld\n",i,(void*)vilist[i],j,(void*)vilist[j],zm2l(sz[i]),zm2l(sz[j]));ierror(0);}
 	  if(!zmleq(al[i],al[j]))
-	    {printf("%d(%p) %d(%p) %ld %ld\n",i,vilist[i],j,vilist[j],zm2l(al[i]),zm2l(al[j]));ierror(0);}
+	    {printf("%d(%p) %d(%p) %ld %ld\n",i,(void*)vilist[i],j,(void*)vilist[j],zm2l(al[i]),zm2l(al[j]));ierror(0);}
 	  vilist[i]->offset=vilist[j]->offset;
 	  if(DEBUG&2048) printf("set to %ld (eqto)\n",(long)zm2l(vilist[i]->offset));
 	  continue;
@@ -1278,7 +1292,7 @@ int peephole()
 	      if(DEBUG&1024){ printf("lshift converted to ASSIGN 0:\n");pric2(stdout,p);}
 	      o.val.vmax=l2zm(0L);eval_const(&o.val,MAXINT);
 	      insert_const(&p->q1.val,t);p->q1.flags=KONST;
-	      p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];
+	      p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];p->typf2=0;
 	      changed=1;
 	    }else{
 	      if(DEBUG&1024){ printf("rshift changed to maxlength:\n");pric2(stdout,p);}
@@ -1311,7 +1325,7 @@ int peephole()
 	if((eins>0&&(c==MULT||c==DIV))||(null&&(c==ADD||c==SUB||c==ADDI2P||c==SUBIFP||c==LSHIFT||c==RSHIFT||c==OR||c==XOR))){
 	  if(DEBUG&1024){ printf("operation converted to simple assignment:\n");pric2(stdout,p);}
 	  if(c==ADDI2P||c==SUBIFP) p->typf=t=p->typf2;
-	  p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];
+	  p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];p->typf2=0;
 	  changed=1;
 	}
 	if(null&&(c==MULT||c==DIV||c==MOD||c==AND)){
@@ -1319,7 +1333,7 @@ int peephole()
 	  if(DEBUG&1024){ printf("operation converted to ASSIGN 0:\n");pric2(stdout,p);}
 	  o.val.vmax=l2zm(0L);eval_const(&o.val,MAXINT);
 	  insert_const(&p->q1.val,t);p->q1.flags=KONST;
-	  p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];
+	  p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];p->typf2=0;
 	  changed=1;
 	}
 	if((ISINT(t)||fp_assoc)&&(c==ADD||c==SUB||c==ADDI2P||c==SUBIFP||c==MULT||c==LSHIFT||c==RSHIFT||c==OR||c==AND)){
@@ -1390,9 +1404,10 @@ int peephole()
 	  p->q2.flags=0;
 	  p->typf=t=p->typf2;
 	  p->q2.val.vmax=sizetab[t&NQ];
+	  p->typf2=0;
 	  changed=1;
 	}
-	if((c==ADD||c==SUB)&&ISINT(t)&&p->next&&p->next->next){
+	if(!have_alias&&(c==ADD||c==SUB)&&ISINT(t)&&p->next&&p->next->next){
 	  /*FIXME: using SCRATCH is not nice */
 	  IC *p1=p->next,*p2=p1->next;
 	  if(p1->code==MULT&&p2->code==ADDI2P&&
@@ -1402,6 +1417,7 @@ int peephole()
 	     !compare_objs(&p1->z,&p2->q2,t)){
 
 	    if(DEBUG&1024){ printf("rearranging array-access(1):\n");pric2(stdout,p);pric2(stdout,p1);pric2(stdout,p2);}
+
 	    p1->q1=p->q1;
 	    p->q1=p2->q1;
 	    p2->q1=p2->z;
@@ -1409,6 +1425,7 @@ int peephole()
 	    calc(MULT,t,&p->q2.val,&p1->q2.val,&p->q2.val,0);
 	    if(c==ADD) p->code=ADDI2P; else p->code=SUBIFP;
 	    p->typf2=p2->typf2;
+	    p->z.flags&=~SCRATCH;
 	    if(!(p->q1.flags&VARADR)){
 	      /* for static addresses it is best to add the constant
 		 part of the offset first (can be folded); for others
@@ -1438,7 +1455,7 @@ int peephole()
 	  if(DEBUG&1024){ printf("operation converted to ASSIGN 0:\n");pric2(stdout,p);}
 	  o.val.vmax=l2zm(0L);eval_const(&o.val,MAXINT);
 	  insert_const(&p->q1.val,t);p->q1.flags=KONST;
-	  p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];
+	  p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];p->typf2=0;
 	  changed=1;
 	}
       }
@@ -1469,7 +1486,7 @@ int peephole()
 	if(DEBUG&1024){ printf("i-i, i/i, i%%i converted to ASSIGN 0/1:\n");pric2(stdout,p);}
 	if(c==DIV) o.val.vmax=l2zm(1L); else o.val.vmax=l2zm(0L);
 	eval_const(&o.val,MAXINT);insert_const(&p->q1.val,t);p->q1.flags=KONST;
-	p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];
+	p->code=c=ASSIGN;p->q2.flags=0;p->q2.val.vmax=sizetab[t&NQ];p->typf2=0;
 	changed=1;
       }
       if(c==ASSIGN&&(p->z.flags&VAR)&&p->z.flags==p->q1.flags&&p->z.v==p->q1.v&&zmeqto(p->z.val.vmax,p->q1.val.vmax)){
@@ -1489,6 +1506,7 @@ int peephole()
 	  p1->q1=p->q1;
 	  p1->code=ASSIGN;
 	  p1->q2.val.vmax=sizetab[p1->typf&NQ];
+	  p1->typf2=0;
 	  continue;
 	}
 	/* TODO: better decision when to use for which targets? */
@@ -1525,13 +1543,29 @@ int peephole()
 
       if((c==ADDI2P||c==SUBIFP)&&(p->q1.flags&(VARADR|DREFOBJ))==VARADR){
 	IC *p2=p->next;
-	if(p2->code==ADDI2P&&p->typf2==p2->typf2&&!compare_objs(&p->z,&p2->q1,p->typf2)&&(p2->q2.flags&(KONST|DREFOBJ))==KONST){
+	if(p2&&p2->code==ADDI2P&&p->typf2==p2->typf2&&!compare_objs(&p->z,&p2->q1,p->typf2)&&(p2->q2.flags&(KONST|DREFOBJ))==KONST&&((p->z.flags&SCRATCH)||!compare_objs(&p->z,&p2->z,p->typf2))){
 	  if(DEBUG&1024){printf("rearranging ADDI2P to fold VARADR+const\n");pric2(stdout,p);pric2(stdout,p2);}
 	  eval_const(&p2->q2.val,p2->typf);
 	  p->q1.val.vmax=zmadd(p->q1.val.vmax,vmax);
 	  p2->code=ASSIGN;
 	  p2->typf=p2->typf2;
+	  p2->q2.flags=0;
 	  p2->q2.val.vmax=sizetab[p2->typf&NQ];
+	  p2->typf2=0;
+	  changed=1;
+	}
+      }
+
+      if((c>=OR&&c<=AND)&&!is_volatile_obj(&p->q1)&&!compare_objs(&p->q1,&p->q2,t)){
+	changed=1;
+	p->code=ASSIGN;
+	p->q2.flags=0;
+	p->q2.val.vmax=sizetab[t&NQ];
+	if(c==XOR){
+	  p->q1.flags=KONST;
+	  gval.vmax=Z0;
+	  eval_const(&gval,MAXINT);
+	  insert_const(&p->q1.val,t);
 	}
       }
 

@@ -208,7 +208,7 @@ type *new_type(int t)
   return new;
 }
 
-type *new_array(type *t,node *p)
+type *new_array(type *t,mnode *p)
 {
   type *new=new_typ();
   simplify_tree(p);
@@ -396,9 +396,9 @@ char *nodename[]={
   "int2real","real2int","assign","call","argument"
 };
 
-node *number_node(void)
+mnode *number_node(void)
 {
-  node *new=getmem(sizeof(*new));
+  mnode *new=getmem(sizeof(*new));
   new->flags=NNUMBER;
   if(strstr(tkname,".")){
     double rval;
@@ -414,10 +414,10 @@ node *number_node(void)
   return new;
 }
 
-node *var_node(void)
+mnode *var_node(void)
 {
   var *v=find_var(tkname,0);
-  node *new;
+  mnode *new;
   if(!v){
     error(6,"unknown identifier: %s",tkname);
   }
@@ -430,9 +430,9 @@ node *var_node(void)
 }
 
 
-node *binary_node(enum nodeflags flags,node *left,node *right)
+mnode *binary_node(enum nodeflags flags,mnode *left,mnode *right)
 {
-  node *new=getmem(sizeof(*new));
+  mnode *new=getmem(sizeof(*new));
   new->flags=flags;
   new->left=left;
   new->right=right;
@@ -466,7 +466,7 @@ node *binary_node(enum nodeflags flags,node *left,node *right)
   return new;
 }
 
-void print_tree(node *p)
+void print_tree(mnode *p)
 {
   printf("%s(",nodename[p->flags]);
   if(p->left)
@@ -486,9 +486,9 @@ void print_tree(node *p)
   printf(")");
 }
 
-node *conv_tree(node *p,int tflags)
+mnode *conv_tree(mnode *p,int tflags)
 {
-  node *new;
+  mnode *new;
   if(p->type->flags==tflags)
     return p;
   new=getmem(sizeof(*new));
@@ -502,7 +502,7 @@ node *conv_tree(node *p,int tflags)
   return new;
 }
 
-void free_tree(node *p)
+void free_tree(mnode *p)
 {
   if(p->left)
     free_tree(p->left);
@@ -514,7 +514,7 @@ void free_tree(node *p)
 }
 
 
-static void const_node(node *p,int val)
+static void const_node(mnode *p,int val)
 {
   p->flags=NNUMBER;
   p->ivalue=val;
@@ -525,7 +525,7 @@ static void const_node(node *p,int val)
   p->left=p->right=0;
 }
 
-void simplify_tree(node *p)
+void simplify_tree(mnode *p)
 {
   if(p->left)
     simplify_tree(p->left);
@@ -543,7 +543,7 @@ void simplify_tree(node *p)
   }
 }
 
-void assign_statement(node *left,node *right)
+void assign_statement(mnode *left,mnode *right)
 {
   if(left->type->flags==ARRAY||right->type->flags==ARRAY)
     error(11,"array type in assignment");
@@ -604,7 +604,7 @@ void assign_statement(node *left,node *right)
   free_tree(right);
 }
 
-void return_statement(node *p)
+void return_statement(mnode *p)
 {
   icode *new=new_icode();
   p=conv_tree(p,INT); /*FIXME*/
@@ -617,7 +617,7 @@ void return_statement(node *p)
   free_tree(p);
 }
 
-void while_statement(node *p)
+void while_statement(mnode *p)
 {
   int loop=++label,exit=++label;
   simplify_tree(p);
@@ -640,7 +640,7 @@ void while_statement(node *p)
 void while_end()
 {
   int loop,exit;
-  node *p;
+  mnode *p;
   exit=pop_int();
   loop=pop_int();
   p=pop_ptr();
@@ -655,7 +655,7 @@ void while_end()
 #endif
 }
 
-void if_statement(node *p)
+void if_statement(mnode *p)
 {
   int true=++label,false=++label;
   simplify_tree(p);
@@ -683,7 +683,7 @@ void if_else()
 
 int label;
 
-operand *gen_tree(node *p)
+operand *gen_tree(mnode *p)
 {
   icode *new;
   static operand op;
@@ -832,7 +832,7 @@ void gen_label(int l)
   add_icode(new);
 }
 
-void gen_cond(node *p,int true_label,int false_label)
+void gen_cond(mnode *p,int true_label,int false_label)
 {
   icode *new;
   if(p->flags==NAND){
@@ -874,7 +874,7 @@ void gen_cond(node *p,int true_label,int false_label)
   add_icode(new);
 }
 
-int push_arg(node *p)
+int push_arg(mnode *p)
 {
   if(p->flags==NARG){
     int s;

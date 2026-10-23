@@ -1,4 +1,4 @@
-/*  $VER: vbcc (regs.c) $Revision: 1.31 $   */
+/*  $VER: vbcc (regs.c) $Revision: 1.39 $   */
 /*  Registerzuteilung           */
 
 #include "opt.h"
@@ -190,7 +190,7 @@ void insert_regs(flowgraph *fg1)
     fg=fg1;
     while(fg){
         if(DEBUG&8192) printf("block %d:\n",fg->index);
-	if(fg!=fg1&&!fg->branchout&&!fg->normalout&&fg->start==fg->end)
+	if(fg!=fg1&&!fg->branchout&&!fg->normalout&&fg->start==fg->end&&fg->start&&fg->start->code==LABEL)
 	  exit_block=1;
 	else
 	  exit_block=0;
@@ -292,7 +292,7 @@ void insert_regs(flowgraph *fg1)
                             }
                         }else tp=lic;
                         insert_IC_fg(fg,tp,new);
-			if(mark_retreg){
+			if(mark_retreg&&!fg->regv[mark_retreg]){
 			  IC *nop;
 			  insert_allocreg(fg,tp,ALLOCREG,mark_retreg);
 			  insert_allocreg(fg,new,FREEREG,mark_retreg);
@@ -508,7 +508,7 @@ void do_loop_regs(flowgraph *start,flowgraph *end,int intask)
 		if(s==INT_MIN||savings[i][r]==INT_MIN)
 		  savings[i][r]=INT_MIN;
 		else
-		  savings[i][r]+=iterations*s;
+		  savings[i][r]+=(p->code==SETRETURN)?s:iterations*s;
 	      }
 	    }
 	  }
@@ -982,6 +982,14 @@ void create_const_vars(flowgraph *fg)
 	p->z.v=v;
 	p->z.val.vmax=l2zm(0L);
       }
+      if(addr_vkonst){
+	if((p->q1.flags&(VAR|DREFOBJ))==VAR&&(p->q1.v->storage_class==STATIC||p->q1.v->storage_class==EXTERN)){
+#if 0
+	  t=POINTER_VARADR(p->q1.v);
+	  v=add_const_var(&p->q1,t);
+#endif	  
+	}
+      }
       if(p==fg->end) break;
     }
   }
@@ -1348,7 +1356,7 @@ int find_best_local_reg(IC *fp,Var *v,int preferred)
       if(used==0&&!(p->z.flags&DREFOBJ))
 	break;
     }
-    if(p->code==CALL){
+    if(p->code==CALL&&p!=fp){
       if((p->q1.flags&(VAR|DREFOBJ))==VAR&&p->q1.v->fi&&(p->q1.v->fi->flags&ALL_REGS)&&!(disable&2048)){
 	for(r=1;r<=MAXR;r++){
 	  if(regscratch[r]&&BTST(p->q1.v->fi->regs_modified,r))
@@ -1420,7 +1428,7 @@ void search_late_opt(flowgraph *fg,IC *n,obj *o)
 	if((n->q2.flags&VAR)&&n->q2.v==o->v) ucnt++;
 	if((n->z.flags&(VAR|DREFOBJ))==(VAR|DREFOBJ)&&n->q1.v==o->v) ucnt++;
 	if(ucnt!=1) return;
-	memset(late_changes,vsize,0);
+	memset(late_changes,0,vsize);
 	if((p->q1.flags&(VAR|VARADR))==VAR){
 	  int i=p->q1.v->index;
 	  if(p->q1.flags&DREFOBJ) i+=vcount-rcount;
@@ -1429,16 +1437,20 @@ void search_late_opt(flowgraph *fg,IC *n,obj *o)
 	    if(BTST(late_changes,i)) return;
 	  }
 	}
+	if(is_volatile_ic(p)||is_volatile_ic(n)) return;
 	if(DEBUG&1024){printf("removing CONVERT (!must_convert)\n");pric2(stdout,p);pric2(stdout,n);}
-	o->v=p->q1.v;
-	o->val.vmax=p->q1.val.vmax;
-	if(p->q1.flags&DREFOBJ){
-	  o->flags|=DREFOBJ;
-	  o->dtyp=p->q1.dtyp;
-	}
-	n->use_list=myrealloc(n->use_list,VLS*(n->use_cnt+p->use_cnt));
-	memcpy(&n->use_list[n->use_cnt],&p->use_list[0],p->use_cnt*VLS);
-	n->use_cnt+=p->use_cnt;
+	if(p->q1.flags&VAR){
+	  o->v=p->q1.v;
+	  o->val.vmax=p->q1.val.vmax;
+	  if(p->q1.flags&DREFOBJ){
+	    o->flags|=DREFOBJ;
+	    o->dtyp=p->q1.dtyp;
+	  }
+	  n->use_list=myrealloc(n->use_list,VLS*(n->use_cnt+p->use_cnt));
+	  memcpy(&n->use_list[n->use_cnt],&p->use_list[0],p->use_cnt*VLS);
+	  n->use_cnt+=p->use_cnt;
+	}else
+	  *o=p->q1;
 	remove_IC_fg(fg,p);
       }
 #if 0/* BIGENDIAN||LITTLEENDIAN*/
@@ -1538,14 +1550,18 @@ void local_regs(flowgraph *fg)
       i=replace_local_reg(&p->z);
       if((p->z.flags&(VAR|DREFOBJ))==VAR){
 	if(i){
-	  lregv[i]=0;regu[i]=0;
-	  if(reg_pair(i,&rp)){
-	    nr1=rp.r1;
-	    nr2=rp.r2;
-	    regu[nr1]=regu[nr2]=0;
+	  if(((!(p->q1.flags&VAR))||p->q1.v!=p->z.v)&&
+	     ((!(p->q2.flags&VAR))||p->q2.v!=p->z.v)){
+
+	    lregv[i]=0;regu[i]=0;
+	    if(reg_pair(i,&rp)){
+	      nr1=rp.r1;
+	      nr2=rp.r2;
+	      regu[nr1]=regu[nr2]=0;
+	    }
+	    nr=i;mustalloc=1;
+	    if(DEBUG&8192) printf("regu[%s] decremented to %d\n",regnames[i],regu[i]);
 	  }
-	  nr=i;mustalloc=1;
-	  if(DEBUG&8192) printf("regu[%s] decremented to %d\n",regnames[i],regu[i]);
 	}else{
 	  BCLR(inmem,p->z.v->index);
 	}

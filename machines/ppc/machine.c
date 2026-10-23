@@ -16,12 +16,12 @@ char cg_copyright[]="vbcc code-generator for PPC V0.7 (c) in 1997-2022 by Volker
 int g_flags[MAXGF]={STRINGFLAG,STRINGFLAG,0,0,0,0,
                     0,0,0,0,0,
                     0,0,0,0,0,0,
-		    0,0,0};
+		    0,0,0,0};
 char *g_flags_name[MAXGF]={"cpu","fpu","const-in-data","sd","merge-constants","fsub-zero",
                            "elf","amiga-align","no-regnames","no-peephole","setccs",
                            "use-lmw","poweropen","sc","madd","eabi","gas",
 			   "no-align-args","conservative-sr","use-commons",
-                           "baserel32os4","baserel32mos","oldlibcalls"};
+                           "baserel32os4","baserel32mos","oldlibcalls","prof"};
 union ppi g_flags_val[MAXGF];
 
 /*  Alignment-requirements for all types in bytes.              */
@@ -116,6 +116,7 @@ char *g_attr_name[]={"__far","__near","__chip","__saveds","__rfi","__saveall",
 #define BASERELOS4 (g_flags[20]&USEDFLAG)
 #define BASERELMOS (g_flags[21]&USEDFLAG)
 #define OLDLIBCALLS (g_flags[22]&USEDFLAG)
+#define PROFILER (g_flags[23]&USEDFLAG)
 
 
 static char *mregnames[MAXR+1];
@@ -171,7 +172,7 @@ static int bp32mos=14;             /*  baserel32 pointer for MorphOS       */
 static long stack;
 static int stack_valid;
 static long tmpoff; /* offset for additional temporaries, upper end! */
-static int lastlabel,exit_label;
+static int lastlabel,exit_label,proflabel;
 static int sdp;
 static int q1loaded,q2loaded;
 static int section=-1,newobj,crsave;
@@ -192,7 +193,7 @@ static int all_regs;
 
 struct StatFPtrList {
   struct StatFPtrList *next;
-  struct Var *vptr;
+  int label;
 };
 static struct StatFPtrList *firstfptr = NULL;
 
@@ -212,7 +213,7 @@ static long real_offset(struct obj *o)
   if(zm2l(o->v->offset)>=0){
      return zm2l(o->v->offset)+frameoffset+zm2l(o->val.vmax);
   }else{
-    return framesize+minframe-zm2l(o->v->offset)-zm2l(maxalign)+zm2l(o->val.vmax);
+    return framesize+minframe-zm2l(o->v->offset)-zm2l(maxalign)+zm2l(o->val.vmax)+(PROFILER?32:0);
   }
 }
 static long hi(long off)
@@ -349,14 +350,14 @@ static void load_address(FILE *f,int r,struct obj *o,int typ)
 	    struct StatFPtrList **oldsfp=&firstfptr;
 	    struct StatFPtrList *sfp=firstfptr;
 	    while(sfp){
-	      if(sfp->vptr==o->v) break;
+	      if(sfp->label==zm2l(o->v->offset)) break;
 	      oldsfp=&sfp->next;
 	      sfp=sfp->next;
 	    }
 	    if(!sfp){
 	      *oldsfp=sfp=mymalloc(sizeof(struct StatFPtrList));
 	      sfp->next=NULL;
-	      sfp->vptr=o->v;
+	      sfp->label=zm2l(o->v->offset);
 	    }
 	  }
 	  emit(f,"\tl%s\t%s,%s",ldt(LONG),mregnames[r],tocprefix);
@@ -1245,7 +1246,18 @@ static void function_top(FILE *f,struct Var *v,long offset)
   if(mregnames[1]!=regnames[1]) emit(f,"#vsc elf\n");
   if(g_flags[0]&USEDFLAG) emit(f,"#vsc cpu %s\n",g_flags_val[0].p);
   if(g_flags[1]&USEDFLAG) emit(f,"#vsc fpu %s\n",g_flags_val[1].p);
+  if(PROFILER){
+    proflabel=++label;
+    if(POWEROPEN){
+      emit(f,tocname);section=TOC;
+      emit(f,"%s%s%d:\n",tocprefix,labprefix,proflabel);
+      emit(f,"\t.long\t%s%d\n",labprefix,proflabel);
+    }
+  }
   if(!special_section(f,v)&&section!=CODE){emit(f,codename);if(f) section=CODE;}
+  if(PROFILER){
+    emit(f,"%s%d:\n\t.byte\t\"%s\",0\n",labprefix,proflabel,v->identifier);
+  }
   if(!GAS) emit(f,"\t.sdreg\t%s\n",mregnames[sd]);
   if(!optsize) emit(f,"\t.align\t4\n");
   if(v->storage_class==EXTERN){
@@ -1254,6 +1266,18 @@ static void function_top(FILE *f,struct Var *v,long offset)
     emit(f,"%s%s:\n",idprefix,v->identifier);
   }else
     emit(f,"%s%ld:\n",labprefix,zm2l(v->offset));
+  if(PROFILER){
+    if(POWEROPEN){
+      emit(f,"\tlwz\t%s,%s%s%d(%s)\n",mregnames[t1],tocprefix,labprefix,proflabel,mregnames[r2]);
+    }else{
+      emit(f,"\tlis\t%s,%s%d@ha\n",mregnames[t1],labprefix,proflabel);
+      emit(f,"\taddi\t%s,%s,%s%d@l\n",mregnames[t1],mregnames[t1],labprefix,proflabel);
+    }
+    emit(f,"\tsubi\t%s,%s,32\n",mregnames[sp],mregnames[sp]);
+    emit(f,"\tmflr\t%s\n",mregnames[t2]);
+    emit(f,"\tbl\t%s__startprof\n",idprefix);
+    emit(f,"\tmtlr\t%s\n",mregnames[t2]);
+  }
   frameoffset=minframe+maxpushed;
   framesize=frameoffset+offset;
   stme=0;
@@ -1452,6 +1476,12 @@ static void function_bottom(FILE *f,struct Var *v,long offset)
 	else
 	  emit(f,"\tl%s\t%s,4(%s)\n\tmtlr\t%s\n",ldt(LONG),mregnames[t1],mregnames[sp],mregnames[t1]);
       }
+    }
+    if(PROFILER){
+      emit(f,"\tmflr\t%s\n",mregnames[t2]);
+      emit(f,"\tbl\t%s__endprof\n",idprefix);
+      emit(f,"\tmtlr\t%s\n",mregnames[t2]);
+      emit(f,"\taddi\t%s,%s,32\n",mregnames[sp],mregnames[sp]);
     }
     emit(f,ret);
   }
@@ -2080,12 +2110,12 @@ static int handle_llong(FILE *f,struct IC *p)
   create_loadable(f,&p->q1,t1);
 
   if(tmpoff>=32768&&(regs[r3]||regs[r4]||regs[r5]||regs[r6])){
-    emit(f,"\taddis\t%s,%s,%ld\n",mregnames[t2],mregnames[sp],hi(tmpoff));
+    emit(f,"\taddis\t%s,%s,%ld\n",mregnames[t2],mregnames[fp],hi(tmpoff));
     if(lo(tmpoff)) emit(f,"\taddi\t%s,%s,%ld\n",mregnames[t2],mregnames[t2],lo(tmpoff));
     msp=t2;
     mtmpoff=0;
   }else{
-    msp=sp;
+    msp=fp;
     mtmpoff=tmpoff;
   }
 
@@ -2866,7 +2896,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
     if(c==LABEL) {ccset=0;emit(f,"%s%d:\n",labprefix,t);continue;}
     if(c==BRA){
       ccset=0;
-      if(t==exit_label&&framesize==0)
+      if(t==exit_label&&framesize==0&&!PROFILER)
 	emit(f,ret);
       else
 	emit(f,"\tb\t%s%d\n",labprefix,t);
@@ -2938,7 +2968,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
           }
         }
       }
-      if(t==exit_label&&framesize==0&&!strcmp(ret,"\tblr\n"))
+      if(t==exit_label&&framesize==0&&!strcmp(ret,"\tblr\n")&&!PROFILER)
 	emit(f,"\tb%slr\t%s\n",ccs[c-BEQ],mregnames[p->q1.reg]);
       else
 	emit(f,"\tb%s\t%s,%s%d\n",ccs[c-BEQ],mregnames[p->q1.reg],labprefix,t);
@@ -3148,11 +3178,11 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
         }
         if(tmpoff>32767){
           moff=0;offreg=t1;
-          emit(f,"\taddis\t%s,%s,%ld\n",mregnames[offreg],mregnames[sp],hi(tmpoff));
+          emit(f,"\taddis\t%s,%s,%ld\n",mregnames[offreg],mregnames[fp],hi(tmpoff));
           emit(f,"\taddi\t%s,%s,%ld\n",mregnames[offreg],mregnames[offreg],lo(tmpoff));
         }else{
           moff=tmpoff;
-          offreg=sp;
+          offreg=fp;
         }
         if((t&NU)==(UNSIGNED|INT)||(t&NU)==(UNSIGNED|LONG)){
           o.flags=KONST;
@@ -3191,7 +3221,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 	  BSET(regs_modified,zreg);
 	  BSET(regs_modified,q1reg);
         }
-        if(t==CHAR) emit(f,"\textsb\t%s,%s\n",mregnames[zreg],mregnames[zreg]);
+        if((t&NU)==CHAR) emit(f,"\textsb\t%s,%s\n",mregnames[zreg],mregnames[zreg]);
         continue;
       }
       if(ISFLOAT(t)){
@@ -3202,11 +3232,11 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 	    q1reg=t3;
 	    BSET(regs_modified,t3);
 	  }
-          emit(f,"\taddis\t%s,%s,%ld\n",mregnames[offreg],mregnames[sp],hi(tmpoff));
+          emit(f,"\taddis\t%s,%s,%ld\n",mregnames[offreg],mregnames[fp],hi(tmpoff));
           emit(f,"\taddi\t%s,%s,%ld\n",mregnames[offreg],mregnames[offreg],lo(tmpoff));
         }else{
           moff=tmpoff;
-          offreg=sp;
+          offreg=fp;
         }
         o.flags=KONST;
         ip=(char *)&o.val.vdouble;
@@ -3227,6 +3257,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
           emit(f,"\tl%s\t%s,%ld(%s)\n",ldt(DOUBLE),mregnames[zreg],moff-8,mregnames[offreg]);
           emit(f,"\tfsub\t%s,%s,%s\n",mregnames[zreg],mregnames[zreg],mregnames[f2]);
         }else{
+	  if((to&NU)==CHAR) emit(f,"\textsb\t%s,%s\n",mregnames[q1reg],mregnames[q1reg]);
           emit(f,"\tlis\t%s,17200\n",mregnames[t2]);
           emit(f,"\tst%s\t%s,%ld(%s)\n",sdt(INT),mregnames[t2],moff-8,mregnames[offreg]);
           emit(f,"\txoris\t%s,%s,32768\n",mregnames[t2],mregnames[q1reg]);
@@ -3684,9 +3715,9 @@ void cleanup_cg(FILE *f)
     if(f) section=TOC;
   }
   while(tfp=fp){
-    emit(f,"%s%s%ld:\n\t.long\t%s%ld\n",
-	 tocprefix,labprefix,zm2l(tfp->vptr->offset),
-	 labprefix,zm2l(tfp->vptr->offset));
+    emit(f,"%s%s%d:\n\t.long\t%s%d\n",
+	 tocprefix,labprefix,tfp->label,
+	 labprefix,tfp->label);
     fp=fp->next;
     free(tfp);
   }
@@ -3696,8 +3727,8 @@ void cleanup_cg(FILE *f)
     if(f){
       if(POWEROPEN&&!use_sd(p->typ)){
         emit(f,tocname);
-        emit(f,"%s%s%ld:\n",tocprefix,labprefix,zm2l(p->label));
-        emit(f,"\t.long\t%s%ld\n",labprefix,zm2l(p->label));
+        emit(f,"%s%s%d:\n",tocprefix,labprefix,p->label);
+        emit(f,"\t.long\t%s%d\n",labprefix,p->label);
         if(f) section=TOC;
       }
       if(use_sd(p->typ)){

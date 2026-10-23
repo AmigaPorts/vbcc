@@ -106,7 +106,7 @@ struct ext_ic {
 };
 
 /* OSEK support */
-#define HAVE_OSEK 1
+#define HAVE_OSEK 0
 
 /* We use builtin libcalls for some operations */
 #define HAVE_LIBCALLS 1

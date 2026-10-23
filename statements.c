@@ -1,4 +1,4 @@
-/*  $VER: vbcc (statements.c)  $Revision: 1.30 $  */
+/*  $VER: vbcc (statements.c)  $Revision: 1.32 $  */
 
 #include "vbcc_cpp.h"
 #include "vbc.h"
@@ -120,8 +120,7 @@ void statement(void)
 void labeled_statement(void)
 /*  bearbeitet labeled_statement                                */
 {
-  llist *lp;int def=0;
-  nocode=0;
+  llist *lp;int def=0,cm;
   if(ctok->type==T_COLON){
     next_token();
     if(!*buff){
@@ -153,7 +152,9 @@ void labeled_statement(void)
 /* removed */
 #endif
 		}
+    cm=nocode;nocode=0;
     gen_label(lp->label);
+    nocode=cm;
     afterlabel=0;
   }else{
     /*  case    */
@@ -190,7 +191,9 @@ void labeled_statement(void)
 	    lp->switch_count=switch_act;
 	    eval_constn(tree);
 	    insert_const(&lp->val,switch_typ);
+	    cm=nocode;nocode=0;
 	    gen_label(lp->label);
+	    nocode=cm;
 	  }
 	}
       }
@@ -562,6 +565,7 @@ void repair_tree(np p)
   if(p->right) repair_tree(p->right);
   if(p->flags==IDENTIFIER||p->flags==(IDENTIFIER|256))
     p->o.v=find_var(p->identifier,0);
+  if(p->otype) p->ntyp->flags=p->otype;
   if(p->flags==CALL){
     argument_list *al=p->alist;
     while(al){

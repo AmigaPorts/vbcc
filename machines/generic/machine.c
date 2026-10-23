@@ -209,6 +209,18 @@ static long real_offset(struct obj *o)
   return off;
 }
 
+#if !FIXED_SP
+static void push(long l)
+{
+  stackoffset-=l;
+  if(stackoffset<maxpushed) maxpushed=stackoffset;
+}
+static void pop(long l)
+{
+  stackoffset+=l;
+}
+#endif
+
 /*  Initializes an addressing-mode structure and returns a pointer to
     that object. Will not survive a second call! */
 static struct obj *cam(int flags,int base,long offset)
@@ -354,7 +366,7 @@ static struct IC *preload(FILE *f,struct IC *p)
     p->q1.reg=t1;
     p->q1.flags|=(REG|DREFOBJ);
   }
-  if(p->q1.flags&&LOAD_STORE&&!isreg(q1)){
+  if(p->q1.flags&&LOAD_STORE&&!isreg(q1)&&p->code!=CALL&&p->code!=SETRETURN){
     if(p->code==ASSIGN&&isreg(z))
       q1reg=p->z.reg;
     else if(ISFLOAT(q1typ(p)))
@@ -368,8 +380,8 @@ static struct IC *preload(FILE *f,struct IC *p)
 
   if((p->q2.flags&(DREFOBJ|REG))==DREFOBJ&&!p->q2.am){
     p->q2.flags&=~DREFOBJ;
-    load_reg(f,t1,&p->q2,q2typ(p));
-    p->q2.reg=t1;
+    load_reg(f,t2,&p->q2,q2typ(p));
+    p->q2.reg=t2;
     p->q2.flags|=(REG|DREFOBJ);
   }
   if(p->q2.flags&&LOAD_STORE&&!isreg(q2)){
@@ -964,7 +976,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
       continue;
     }
     if(c==MOVEFROMREG){
-      store_reg(f,p->z.reg,&p->q1,regtype[p->z.reg]->flags);
+      store_reg(f,p->q1.reg,&p->z,regtype[p->q1.reg]->flags);
       continue;
     }
     if((c==ASSIGN||c==PUSH)&&((t&NQ)>POINTER||((t&NQ)==CHAR&&zm2l(p->q2.val.vmax)!=1))){
@@ -1035,6 +1047,9 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
       /*FIXME*/
 #if FIXED_SP
       pushed-=zm2l(p->q2.val.vmax);
+#else
+      emit(f,"\tadd.i\t%s%s%s,%ld\n",regnames[sp],THREE_ADDR?",":"",THREE_ADDR?regnames[sp]:"",zm2l(p->q2.val.vmax));
+      pop(zm2l(p->q2.val.vmax));
 #endif
       if((p->q1.flags&(VAR|DREFOBJ))==VAR&&p->q1.v->fi&&(p->q1.v->fi->flags&ALL_REGS)){
 	bvunite(regs_modified,p->q1.v->fi->regs_modified,RSIZE);

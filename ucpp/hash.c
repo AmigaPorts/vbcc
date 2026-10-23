@@ -32,16 +32,7 @@
 #include "hash.h"
 #include "mem.h"
 
-/*
- * hash_string() is a sample hash function for strings
- */
-int hash_string(char *s)
-{
-	unsigned char h = 0;
-
-	for (; *s; s ++) h ^= (unsigned char)(*s);
-	return ((int)h);
-}
+extern size_t hashcode(char *);
 
 /*
  * struct hash_item is the basic data type to internally handle hash tables
@@ -108,7 +99,7 @@ static struct hash_item *del_entry(struct hash_item *blist, void *data,
  * This function creates a new hashtable, with the hashing and comparison
  * functions given as parameters
  */
-struct HT *newHT(int n, int (*cmpdata)(void *, void *), int (*hash)(void *),
+struct HT *newHT(int n, int (*cmpdata)(void *, void *), size_t (*hash)(void *),
 	void (*deldata)(void *))
 {
 	struct HT *t = getmem(sizeof(struct HT));
@@ -129,7 +120,7 @@ struct HT *newHT(int n, int (*cmpdata)(void *, void *), int (*hash)(void *),
  */
 void *putHT(struct HT *ht, void *data)
 {
-	int h;
+	size_t h;
 	struct hash_item *d;
 
 	h = ((*(ht->hash))(data)) % ht->nb_lists;
@@ -147,7 +138,7 @@ void *putHT(struct HT *ht, void *data)
  */
 void *forceputHT(struct HT *ht, void *data)
 {
-	int h;
+	size_t h;
 
 	h = ((*(ht->hash))(data)) % ht->nb_lists;
 	ht->lists[h] = add_entry(ht->lists[h], data);
@@ -161,7 +152,7 @@ void *forceputHT(struct HT *ht, void *data)
  */
 void *getHT(struct HT *ht, void *data)
 {
-	int h;
+	size_t h;
 	struct hash_item *t;
 
 	h = ((*(ht->hash))(data)) % ht->nb_lists;
@@ -178,7 +169,7 @@ void *getHT(struct HT *ht, void *data)
 
 int delHT(struct HT *ht, void *data)
 {
-	int h;
+	size_t h;
 
 	h = ((*(ht->hash))(data)) % ht->nb_lists;
 	ht->lists[h] = del_entry(ht->lists[h], data, ht->cmpdata, ht->deldata);
@@ -286,11 +277,11 @@ void scanHT(struct HT *ht, void (*action)(void *))
  * uniquely identified by their name, which must be the first
  * field of the structure.
  */
-int hash_struct(void *m)
+size_t hash_struct(void *m)
 {
 	char *n = *(char **)m;
 
-	return hash_string(n) & 127;
+	return hashcode(n);
 }
 
 int cmp_struct(void *m1, void *m2)

@@ -372,3 +372,6 @@
 "declaration expected",WARNING|ANSIV,
 "possible redeclaration of var <%s> with different attributes <%s> and <%s>",WARNING, /* 370 */
 "redeclaration of var <%s> with new attribute <%s>",WARNING,
+"suspicious vbcc option -O=%d - do you mean vc -O%d ?",WARNING|NOLINE,
+"ISO C forbids evaluated comma operators in #if expressions",WARNING|ANSIV|PREPROC,
+"specification of output file required",ERROR|NOLINE|FATAL,

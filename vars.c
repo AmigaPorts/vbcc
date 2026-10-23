@@ -1,8 +1,11 @@
-/*  $VER: vbcc (vars.c) $Revision: 1.41 $   */
+/*  $VER: vbcc (vars.c) $Revision: 1.47 $   */
 #include "vbc.h"
 #ifdef AMIGA
 static const char *__ver="$VER: vbcc 0.9i_pre (xx.yy.2022)\r\n";
 long __stack=65536;
+#ifdef __VBCC__
+size_t _nalloc=0x40000;
+#endif
 #endif
 char *s,*ident;
 char number[MAXI],buff[MAXI];
@@ -19,12 +22,14 @@ llist *vladeflabels[MAXN],*vlajmplabels[MAXN];
 vlaadjust_list *vlaadjusts[MAXN];
 rpair rp;
 FILE *out,*ic1,*ic2,*ppout,*cmdfile;
-int c99=1;
+int c99=1,c11;
 int force_statics,prefer_statics;
 int range_opt;
 int merge_strings;
 int sec_per_obj;
 int mask_opt;
+int array_workaround;
+int nobins;
 int opencl;
 int disallow_statics;
 int header_cnt;
@@ -56,7 +61,8 @@ int c_flags[MAXCF]={
     0,
     VALFLAG,VALFLAG,VALFLAG,VALFLAG,
     STRINGFLAG,0,0,0,0,0,
-    0,0,0,0
+    0,0,0,0,
+    0,0,STRINGFLAG,0
 };
 char *c_flags_name[MAXCF]={
     "O","o","ic1","ic2",
@@ -74,7 +80,8 @@ char *c_flags_name[MAXCF]={
     "warnings-as-errors",
     "clist-copy-stack","clist-copy-static","clist-copy-pointer","inline-memcpy",
     "depobj","c89","force-statics","prefer-statics","range-opt","merge-strings",
-    "sec-per-obj","no-eff-ics","early-eff-ics","mask-opt"
+    "sec-per-obj","no-eff-ics","early-eff-ics","mask-opt",
+    "no-array-idx-opt","no-binary-constants","depfile","c11"
 };
 union ppi c_flags_val[MAXCF];
 char *inname;

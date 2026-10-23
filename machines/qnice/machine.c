@@ -2030,7 +2030,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 	  if(!p2||p2->code<BEQ||p2->code>BGT) ierror(0);
 	  c=p2->code;
 	  if(c==BEQ||c==BNE){
-	    emit(f,"\tcmp\t",s);
+	    emit(f,"\tcmp\t");
 	    emit_lword(f,&p->q1,t,"@%s++");
 	    emit(f,",");
 	    emit_lword(f,&p->q2,t,"@%s++");
@@ -2039,7 +2039,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 	      emit(f,"\trbra\t%s%d,!z\n",labprefix,elab=++label);
 	    else 
 	      emit(f,"\trbra\t%s%d,!z\n",labprefix,p2->typf);
-	    emit(f,"\tcmp\t",s);
+	    emit(f,"\tcmp\t");
 	    emit_hword(f,&p->q1,t,"@%s++");
 	    emit(f,",");
 	    emit_hword(f,&p->q2,t,"@%s++");
@@ -2049,14 +2049,14 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 	    elab=++label;
 	    if(p->q1.flags&DREFOBJ) emit(f,"\tadd\t1,%s\n",regnames[p->q1.reg]);
 	    if(p->q2.flags&DREFOBJ) emit(f,"\tadd\t1,%s\n",regnames[p->q2.reg]);
-	    emit(f,"\tcmp\t",s);
+	    emit(f,"\tcmp\t");
 	    emit_hword(f,&p->q2,t,"@%s");
 	    emit(f,",");
 	    emit_hword(f,&p->q1,t,"@%s");
 	    emit(f,"\n");
 	    emit(f,"\trbra\t%s%d,%s\n",labprefix,c==BLT?p2->typf:elab,(t&UNSIGNED)?ccu[BLT-BEQ]:ccs[BLT-BEQ]);
 	    /* unfortunately flags are overwritten... */
-	    emit(f,"\tcmp\t",s);
+	    emit(f,"\tcmp\t");
 	    emit_hword(f,&p->q2,t,"@%s");
 	    emit(f,",");
 	    emit_hword(f,&p->q1,t,"@%s");
@@ -2064,7 +2064,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 	    emit(f,"\trbra\t%s%d,!z\n",labprefix,c==BLT?elab:p2->typf);
 	    if(p->q1.flags&DREFOBJ) emit(f,"\tsub\t1,%s\n",regnames[p->q1.reg]);
 	    if(p->q2.flags&DREFOBJ) emit(f,"\tsub\t1,%s\n",regnames[p->q2.reg]);
-	    emit(f,"\tcmp\t",s);
+	    emit(f,"\tcmp\t");
 	    emit_lword(f,&p->q2,t,"@%s");
 	    emit(f,",");
 	    emit_lword(f,&p->q1,t,"@%s");
@@ -2082,7 +2082,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 #endif
 	  continue;
 	}else{
-	  emit(f,"\tcmp\t",s);
+	  emit(f,"\tcmp\t");
 	  emit_obj(f,&p->q2,t);
 	  emit(f,",");
 	  emit_obj(f,&p->q1,t);

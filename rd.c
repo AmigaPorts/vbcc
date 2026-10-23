@@ -1,4 +1,4 @@
-/*  $VER: vbcc (rd.c) $Revision: 1.16 $    */
+/*  $VER: vbcc (rd.c) $Revision: 1.19 $    */
 /*  reaching definitions and constant propagation   */
 
 #include "opt.h"
@@ -111,6 +111,20 @@ void num_defs(void)
 	  BSET(var_defs[i+vcount-rcount],UNDEF(p->defindex));
 	}
         BSET(var_undefs[i],UNDEF(p->defindex));
+#if 0
+	if(p->q1.flags&VAR){
+	  i=p->q1.v->index;
+	  BSET(var_undefs[i],UNDEF(p->defindex));
+	  if(p->q1.flags&DREFOBJ)
+	    BSET(var_undefs[i+vcount-rcount],UNDEF(p->defindex));
+	}
+	if(p->q2.flags&VAR){
+	  i=p->q2.v->index;
+	  BSET(var_undefs[i],UNDEF(p->defindex));
+	  if(p->q2.flags&DREFOBJ)
+	    BSET(var_undefs[i+vcount-rcount],UNDEF(p->defindex));
+	}
+#endif
       }
     }
   }
@@ -137,22 +151,22 @@ void num_defs(void)
 	if(ow==FULL_OVERWRITE||ow==EXACT_OVERWRITE){
 	  BSET(defs_kill[i],j);
 	  BSET(defs_kill[i],UNDEF(j));
-	}
-	if(ow==EXACT_OVERWRITE||ow==NO_OVERWRITE){
 	  BCLR(defs_gen[i],j);
 	  BCLR(defs_gen[i],UNDEF(j));
 	}
+	if(ow==PARTIAL_OVERWRITE)
+	  BCLR(defs_gen[i],j);
       }
     }
     /* every definition defines itself) */
-    BSET(defs_gen[i],i);
+    /*if(p->code!=CALL)*/ BSET(defs_gen[i],i);
     BCLR(defs_gen[i],UNDEF(i));
     BSET(defs_kill[i],UNDEF(i));
   }
   
   if(DEBUG&2048){
     for(i=0;i<vcount;i++){
-      printf("var_defs for var %i %s(%p):\n",i,vilist[i]->identifier,vilist[i]);
+      printf("var_defs for var %i %s(%p):\n",i,vilist[i]->identifier,(void*)vilist[i]);
       print_rd(var_defs[i]);
     }
 	
@@ -193,8 +207,10 @@ int def_overwrites(IC *n,IC *o)
   }else{
     osize=sizetab[ztyp(o)&NQ];
   }
-  if(n->z.flags&DREFOBJ)
-    return zmleq(osize,nsize);
+  if(n->z.flags&DREFOBJ){
+    if(zmeqto(osize,nsize)) return EXACT_OVERWRITE;
+    return zmleq(osize,nsize)?FULL_OVERWRITE:PARTIAL_OVERWRITE;
+  }
 
   nstart=n->z.val.vmax;
   nend=zmsub(zmadd(nstart,nsize),l2zm(1L));
@@ -408,6 +424,7 @@ int fold(IC *p)
   if(c==CONVERT){
     eval_const(&p->q1.val,p->typf2);
     insert_const(&p->q1.val,p->typf);
+    p->typf2=0;
   }else
     calc(c,p->typf,&p->q1.val,&p->q2.val,&p->q1.val,p);
   p->q2.flags=0;
@@ -492,6 +509,7 @@ int propagate(IC *sic,obj *o,int cponly,int global)
        (!BTST(rd_defs,j)||!BTST(var_defs[i],j))) continue;
     found=1;
     p=dlist[j];
+    if(p->code==CALL) continue;
     if(!(p->z.flags&VAR)) return 0;
     if(p->z.v!=o->v) continue;
     t=ztyp(p)&NU;
@@ -534,7 +552,7 @@ int propagate(IC *sic,obj *o,int cponly,int global)
       if(o==&sic->q2&&(q2typ(sic)&NQ)!=(t&NQ)) return 0;
       if(o==&sic->z&&(ztyp(sic)&NQ)!=(t&NQ)) return 0;
       
-      if(DEBUG&1024) printf("can replace %ld+<%s>(%p) by constant\n",zm2l(o->val.vmax),o->v->identifier,o->v);
+      if(DEBUG&1024) printf("can replace %ld+<%s>(%p) by constant\n",zm2l(o->val.vmax),o->v->identifier,(void*)o->v);
       /* TODO: do we need eval_const/insert_const (if representation of unsigned is different? */
       o->val=*val;
       o->flags=KONST;

@@ -1,5 +1,5 @@
 /*  Frontend for vbcc                       */
-/*  (c) in 1995-2016 by Volker Barthelmann  */
+/*  (c) in 1995-2025 by Volker Barthelmann  */
 /*  #define AMIGA for Amiga version         */
 /*  #define ATARI for Atari version         */
 
@@ -51,7 +51,7 @@ struct NameList{
 
 /*  Limit fuer Laenge der Namen (wegen Wildcards)   */
 #define NAMEBUF 1000    /*  MUST BE >= ~TMPNAM_L+7  */
-#define USERLIBS 1000
+#define USERLIBS 1000  /* is there a need for this? */
 
 /*  Ab dieser Laenge werden Objektfiles nicht direkt uebergeben,    */
 /*  sondern aus einem File an den Linker uebergeben                 */
@@ -514,11 +514,11 @@ int main(int argc,char *argv[])
             sprintf(userlibs+l+1,ul,parm+2);
             *parm=0;continue;
         }
-        if(parm[0]=='-'&&parm[1]=='L'){
+        if(parm[0]=='-'&&(parm[1]=='L'||parm[1]=='-')){
             size_t l=strlen(userlibs);
             if((l+strlen(parm)+1)>=USERLIBS){puts("Userlibs too long");exit(EXIT_FAILURE);}
             userlibs[l]=' ';
-            sprintf(userlibs+l+1,"%s",parm);
+            sprintf(userlibs+l+1,"%s",parm[1]=='-'?parm+1:parm);
             *parm=0;continue;
         }
         len+=strlen(parm)+10;
@@ -545,7 +545,7 @@ int main(int argc,char *argv[])
       userlibs[slen]=' ';
     }
     if(flags&VERBOSE){
-      printf("vc frontend for vbcc (c) in 1995-2020 by Volker Barthelmann\n");
+      printf("vc frontend for vbcc (c) in 1995-2025 by Volker Barthelmann\n");
 #ifdef SPECIAL_COPYRIGHT
       printf("%s\n",SPECIAL_COPYRIGHT);
 #endif

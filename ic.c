@@ -1,4 +1,4 @@
-/*  $VER: vbcc (ic.c) $Revision: 1.65 $  */
+/*  $VER: vbcc (ic.c) $Revision: 1.74 $  */
 
 #include "vbc.h"
 #include "opt.h"
@@ -205,6 +205,9 @@ void inline_memcpy(np z,np q,zmax size)
     IC *new=new_IC();
     if(!ISPOINTER(z->ntyp->flags)) {error(39);return;}
     if(!ISPOINTER(q->ntyp->flags)) {error(39);return;}
+
+    new->typf2=gcd(zm2l(falign(q->ntyp->next)),zm2l(falign(z->ntyp->next)));
+
 
     if(z->flags==ADDRESS||z->flags==ADDRESSA||z->flags==ADDRESSS){
       gen_IC(z,0,0);
@@ -737,6 +740,7 @@ void gen_IC(np p,int ltrue,int lfalse)
 	  }
 	}
 	lc=gen_libcall(libname,p->left,t1,p->right,t2);
+	lc->ntyp->flags=p->ntyp->flags;
 	*p=*lc;
 	free(lc);
 	return;
@@ -1061,7 +1065,13 @@ void gen_IC(np p,int ltrue,int lfalse)
 	  new->typf=t->flags;
 	  freetyp(t);
         }else{
-	  new->typf=p->left->ntyp->flags;
+	  if(ISPOINTER(p->left->ntyp->flags)&&ISPOINTER(p->right->ntyp->flags)){
+	    if((p->left->ntyp->flags&NQ)>(p->right->ntyp->flags&NQ))
+	      new->typf=p->left->ntyp->flags|(p->right->ntyp->flags&VOLATILE);
+	    else
+	      new->typf=p->right->ntyp->flags|(p->left->ntyp->flags&VOLATILE);
+	  }else
+	    new->typf=p->left->ntyp->flags|(p->right->ntyp->flags&VOLATILE);
         }
         gen_IC(p->left,0,0);
         convert(p->left,new->typf);
@@ -1567,11 +1577,15 @@ void gen_IC(np p,int ltrue,int lfalse)
             regargs_list *m;
             if(rl->v){
 	      int r;
+#if 0
 	      for(r=MAXR;r>=1;r--){
 		if(regs[r]&&reg_pair(r,&rp)&&(rp.r1==abs(rl->reg)||rp.r2==abs(rl->reg)))
 		  break;
 	      }
 	      if(r<=1) r=abs(rl->reg);
+#else
+	      r=abs(rl->reg);
+#endif
 	      new=new_IC();
 	      new->code=MOVETOREG;
 	      new->typf=0;
@@ -1585,9 +1599,21 @@ void gen_IC(np p,int ltrue,int lfalse)
 		new->z.reg=abs(r);
 	      new->q2.flags=0;
 	      new->q2.val.vmax=regsize[r];
+	      r=new->z.reg;
 	      add_IC(new);
-	      if(rl->rsaved)
-		free_reg(abs(rl->reg));
+	      if(rl->rsaved){
+		if(reg_pair(rl->reg,&rp)){
+		  if(rp.r1==r){
+		    free_reg(rp.r2);
+		  }else if(rp.r2==r){
+		    free_reg(rp.r1);
+		  }else{
+		    free_reg(abs(rl->reg));
+		  }
+		}else{
+		  free_reg(abs(rl->reg));
+		}
+	      }
             }else{
 	      free_reg(abs(rl->reg));
 	    }
@@ -1834,6 +1860,9 @@ static void handle_reglist(regargs_list *nrl,obj *radr)
 #ifdef HAVE_REGPARMS
   int didradr=0;
 #endif
+#if HAVE_REVERSE_REGPARMS
+  IC *lic=last_ic;
+#endif
   while(nrl){
     new=new_IC();
     new->code=ASSIGN;
@@ -1849,7 +1878,11 @@ static void handle_reglist(regargs_list *nrl,obj *radr)
     new->z.v->reg=nrl->reg;
     new->z.v->vtyp->flags|=VOLATILE;
     nrl->v=new->z.v;
+#if HAVE_REVERSE_REGPARMS
+    insert_IC(lic,new);
+#else
     add_IC(new);
+#endif
     
 #ifdef HAVE_REGPARMS
     if(radr&&!didradr){
@@ -1892,6 +1925,13 @@ zmax push_args(argument_list *al,struct_declaration *sd,int n,regargs_list **rl)
 	    static type t;
 	    t.flags=int_erw(al->arg->ntyp->flags);
 	    stdreg=reg_parm(reg_handle,&t,0,fkt->next);
+#if HAVE_TGT_POINTER_TYPE
+	  }else if(ISPOINTER(al->arg->ntyp->flags)){
+	    int m=al->arg->ntyp->flags;
+	    al->arg->ntyp->flags=POINTER_TYPE(al->arg->ntyp->next);
+	    stdreg=reg_parm(reg_handle,al->arg->ntyp,0,fkt->next);
+	    al->arg->ntyp->flags=m;
+#endif
 	  }else{
 	    stdreg=reg_parm(reg_handle,al->arg->ntyp,0,fkt->next);
 	  }
@@ -1922,7 +1962,12 @@ zmax push_args(argument_list *al,struct_declaration *sd,int n,regargs_list **rl)
 	ft->flags=t;
 	sz=sizetab[t&NQ];
       }
-      if((t&NQ)==FLOAT&&n>=sd->count) {t=DOUBLE;ft->flags=t;sz=sizetab[t&NQ];}
+      if(n>=sd->count){
+	if((t&NQ)==FLOAT) {t=DOUBLE;ft->flags=t;sz=sizetab[t&NQ];}
+#if HAVE_TGT_POINTER_TYPE
+	if(ISPOINTER(t)){t=POINTER_TYPE(ft->next);ft->flags=t;sz=sizetab[t&NQ];}
+#endif
+      }
 #ifdef HAVE_REGPARMS
     }else{
       ft=new_typ();
@@ -2077,6 +2122,7 @@ zmax push_args(argument_list *al,struct_declaration *sd,int n,regargs_list **rl)
 	    add_IC(new);
 	    *arg=new->z;
 	    free_reg(arg->reg);
+	    if(DEBUG&16) printf("copy regpair to temp %s\n",regnames[reg]);
 	  }
 	  if(!regs[reg]&&(!reg_pair(reg,&rp)||(!regs[rp.r1]&&!regs[rp.r2]))&&!nocode){
 	    new=new_IC();
@@ -2145,6 +2191,7 @@ zmax push_args(argument_list *al,struct_declaration *sd,int n,regargs_list **rl)
 	      int r=0;
               regargs_list *p;
 
+#if 0
 	      /* register pairs */
 	      if(reg_pair(reg,&rp)){
 		if(regs[reg]||regs[rp.r1]||regs[rp.r2]) 
@@ -2156,8 +2203,9 @@ zmax push_args(argument_list *al,struct_declaration *sd,int n,regargs_list **rl)
 		}
 		if(r<1) r=reg;
 	      }
-
-
+#else
+	      r=reg;
+#endif
               /* Testen, ob Quellregister gesichert wurde. Unschoen. */
               for(p=*rl;p;p=p->next){
                 int ri;
@@ -2182,6 +2230,7 @@ zmax push_args(argument_list *al,struct_declaration *sd,int n,regargs_list **rl)
                 new->z.v=v;
                 new->z.val.vmax=l2zm(0L);
                 add_IC(new);
+		if(DEBUG&16) printf("save-reg %s\n",regnames[reg]);
               }
 	    }else{
 	      regs[reg]|=RNOSAVE;
@@ -2234,6 +2283,7 @@ zmax push_args(argument_list *al,struct_declaration *sd,int n,regargs_list **rl)
 	    nrl->rsaved=rsaved; /* if only part of a pair was saved */
 	    rsaved=0;
             *rl=nrl;
+	    if(DEBUG&16) printf("enter %s into reglist\n",regnames[reg]);
             return of;
         }
     }
@@ -2355,6 +2405,7 @@ void convert(np p,int f)
     convert(p,o);
   }
   if(!volatile_convert&&((o&(NU&~UNSIGNED))==(f&(NU&~UNSIGNED))||(!(mc=must_convert(o,f,const_expr))&&(const_expr||!(optflags&2))))){
+    p->otype=p->ntyp->flags;
     p->ntyp->flags=f;
     if(!ISPOINTER(f)&&!ISARRAY(f)){freetyp(p->ntyp->next);p->ntyp->next=0;}
     return;
@@ -2465,7 +2516,15 @@ void free_reg(int r)
 /*  Gibt Register r frei                                */
 {
     IC *new;
+    int i;
+    static int init,pair[MAXR+1];
     if(!r||nocode) return;
+    if(!init){
+      for(i=1;i<=MAXR;i++)
+	if(reg_pair(i,&rp))
+	  pair[rp.r1]=pair[rp.r2]=i;
+      init=1;
+    }
     if(regs[r]==0&&!cross_module)
       {printf("Register %d(%s):\n",r,regnames[r]);ierror(0);}
     if(DEBUG&16) printf("freed %s\n",regnames[r]);
@@ -2476,6 +2535,8 @@ void free_reg(int r)
     new->q1.reg=r;
     new->q2.flags=new->z.flags=0;
     regs[r]=0;
+    i=pair[r];
+    if(i&&regs[i]&&reg_pair(i,&rp)&&(!regs[rp.r1]||!regs[rp.r2])) regs[i]=0;
     if(reg_pair(r,&rp)){
       if(regs[rp.r1]&RHALF){
 	if(DEBUG&16) printf("keep %s\n",regnames[rp.r1]);

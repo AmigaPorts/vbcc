@@ -1,4 +1,4 @@
-/*  $VER: vbcc (supp.c) $Revision: 1.49 $     */
+/*  $VER: vbcc (supp.c) $Revision: 1.56 $     */
 
 #include "supp.h"
 #include "opt.h"
@@ -104,6 +104,8 @@ static int get_scalar_byte(int f,union atyps *v,zmax n, zuchar *out)
   f&=NQ;
   if(f>=CHAR&&f<=LLONG){
     int j;
+    if (zmleq(sizetab[f&NQ],n))
+      return 0;
     eval_const(v,f);
     if(LITTLEENDIAN)
       j=zm2l(n);
@@ -416,7 +418,7 @@ void freetyp(type *p)
   while(p){
     merk=p->next;
     f=p->flags&NQ;
-    if(merk&&!ISARRAY(f)&&!ISPOINTER(f)&&!ISFUNC(f)&&!ISVECTOR(f)) 
+    if(merk&&!ISARRAY(f)&&!ISPOINTER(f)&&!ISFUNC(f)&&!ISVECTOR(f))
       ierror(0);
     free(p->attr);
     free(p);
@@ -479,11 +481,10 @@ Var *vlength_szof(type *t)
     new->q1.val.vmax=l2zm(0L);
   }else{
     new->q1.flags=KONST;
-#if HAVE_INT_SIZET
-    new->q1.val.vuint=zum2zui(zm2zum(t->size));
-#else
-    new->q1.val.vulong=zum2zul(zm2zum(t->size));
-#endif
+    if(HAVE_INT_SIZET)
+      new->q1.val.vuint=zum2zui(zm2zum(t->size));
+    else
+      new->q1.val.vulong=zum2zul(zm2zum(t->size));
   }
   new->z.flags=VAR;
   nt=new_typ();
@@ -496,11 +497,10 @@ Var *vlength_szof(type *t)
     new->q2.val.vmax=l2zm(0L);
   }else{
     new->q2.flags=KONST;
-#if HAVE_INT_SIZET
-    new->q2.val.vuint=zum2zui(zm2zum(szof(t->next)));
-#else
-    new->q2.val.vulong=zum2zul(zm2zum(szof(t->next)));
-#endif
+    if(HAVE_INT_SIZET)
+      new->q2.val.vuint=zum2zui(zm2zum(szof(t->next)));
+    else
+      new->q2.val.vulong=zum2zul(zm2zum(szof(t->next)));
   }
   add_IC(new);
   return new->z.v;
@@ -619,24 +619,52 @@ zmax szof(type *t)
   }
   return sizetab[i];
 }
-zmax struct_offset(struct_declaration *sd,const char *identifier)
+struct_list *find_member(const char *identifier,struct_declaration *scope)
+{
+  int i;
+  if(!identifier||!*identifier||!scope)
+    ierror(0);
+  for(i=0;i<scope->count;++i){
+    if(!*(*scope->sl)[i].identifier&&(*scope->sl)[i].styp->exact){
+      struct struct_list *p=find_member(identifier,(*scope->sl)[i].styp->exact);
+      if(p) return p;
+    }else{
+      if(!strcmp((*scope->sl)[i].identifier,identifier)){
+	return &(*scope->sl)[i];
+      }
+    }
+  }
+  return 0;
+}
+zmax struct_offset(struct_declaration *sd,const char *identifier,int t)
 {
   int i=0,intbitfield=-1;zmax offset=l2zm(0),al;
+  struct struct_list *sl=0;
+  t&=NQ;
   while(i<sd->count&&strcmp((*sd->sl)[i].identifier,identifier)){
+    if(!((*(*sd->sl)[i].identifier))&&(*sd->sl)[i].styp->exact)
+      if(sl=find_member(identifier,(*sd->sl)[i].styp->exact))
+	break;
     if((*sd->sl)[i].bfoffset>=0){
       if(i+1<sd->count&&(*sd->sl)[i+1].bfoffset>0){
         i++;
         continue;
       }
     }
-    al=(*sd->sl)[i].align;
-    offset=zmmult(zmdiv(zmadd(offset,zmsub(al,l2zm(1L))),al),al);
-    offset=zmadd(offset,szof((*sd->sl)[i].styp));
+    if(t!=UNION){
+      al=(*sd->sl)[i].align;
+      offset=zmmult(zmdiv(zmadd(offset,zmsub(al,l2zm(1L))),al),al);
+      offset=zmadd(offset,szof((*sd->sl)[i].styp));
+    }
     i++;
   }
   if(i>=sd->count) {error(23,identifier);return l2zm(0L);}
-  al=(*sd->sl)[i].align;
-  offset=zmmult(zmdiv(zmadd(offset,zmsub(al,l2zm(1L))),al),al);
+  if(sl){
+    offset=zmadd(offset,struct_offset((*sd->sl)[i].styp->exact,identifier,(*sd->sl)[i].styp->flags));
+  }else if(t!=UNION){
+    al=(*sd->sl)[i].align;
+    offset=zmmult(zmdiv(zmadd(offset,zmsub(al,l2zm(1L))),al),al);
+  }
   return offset;
 }
 #ifdef HAVE_ECPP
@@ -741,6 +769,7 @@ void pric2(FILE *f,IC *p)
     if(p->typf&VOLATILE) fprintf(f,"volatile ");
     if(p->typf&CONST) fprintf(f,"const ");
     if(p->typf&UNSIGNED) fprintf(f,"unsigned ");
+    if(p->typf&BOOLEAN) fprintf(f,"bool ");
     if(p->typf){
       if(ISVECTOR(p->typf))
 	fprintf(f,"%s%d ",typname[VECTYPE(p->typf)&NQ],VECDIM(p->typf));
@@ -761,7 +790,7 @@ void pric2(FILE *f,IC *p)
     if(p->code==ADDI2P||p->code==SUBIFP||p->code==SUBPFP||p->code==ADDRESS)
       fprintf(f," ptype=%s%s",(p->typf2&UNSIGNED)?"unsigned ":"",typname[p->typf2&NQ]);
     if(p->code==ASSIGN||p->code==PUSH)
-      if(p->typf2) fprintf(f," align=%d\n",p->typf2);
+      if(p->typf2) fprintf(f," align=%d",p->typf2);
   }
   if(p->code==CALL){
     fprintf(f," =>");
@@ -1121,6 +1150,7 @@ void prd(FILE *o,type *p)
   if(f&CONST) {fprintf(o,"const ");f&=~CONST;}
   if(f&STRINGCONST) {fprintf(o,"string-const ");f&=~STRINGCONST;}
   if(f&VOLATILE) {fprintf(o,"volatile ");f&=~VOLATILE;}
+  if(f&BOOLEAN) {fprintf(o,"bool ");f&=~BOOLEAN;}
   if(f&UNSIGNED) {fprintf(o,"unsigned ");f&=~UNSIGNED;}
   if(p->attr) fprintf(o,"attr(%s) ",p->attr);
   if(p->reg) fprintf(o,"reg(%s) ",regnames[p->reg]);
@@ -1167,6 +1197,13 @@ void insert_const(union atyps *p,int t)
 /*  Traegt Konstante in entprechendes Feld ein.       */
 {
   if(!p) ierror(0);
+  if((t&(BOOLEAN|UNSIGNED))==(BOOLEAN|UNSIGNED)&&(t&NQ)==CHAR){
+    if(zmeqto(vmax,Z0)&&zumeqto(vumax,ZU0)&&zldeqto(vldouble,d2zld(0.0)))
+      p->vuchar=zum2zuc(ZU0);
+    else
+      p->vuchar=zum2zuc(ZU1);
+    return;
+  }
   t&=NU;
   if(t==CHAR) {p->vchar=vchar;return;}
   if(t==SHORT) {p->vshort=vshort;return;}
@@ -1353,7 +1390,7 @@ int is_volatile_obj(obj *o)
       return 1;
     }
   }
-  if(o->flags&VAR){
+  if((o->flags&VAR)&&!o->v->reg){
     return o->v->vtyp->flags&VOLATILE;
   }else{
     return 0;
@@ -1581,7 +1618,7 @@ zmax va_offset(Var *v)
     rp.next=v->vtyp->next;
     rp.flags=POINTER_TYPE(v->vtyp->next);
     if(!reg_parm(&rh,&rp,0,v->vtyp)){
-      ierror(0);
+      offset=sizetab[rp.flags&NQ];
     }
   }
   for(i=0;i<v->vtyp->exact->count;i++){
@@ -1828,6 +1865,15 @@ int objs_equal(obj *o1,obj *o2,int t)
     return 1;
 }
 
+int gcd(int a,int b)
+{
+  while(b!=0){
+    int t=b;
+    b=(unsigned int)a%(unsigned int)b;
+    a=t;
+  }
+  return a;
+}
 
 #ifdef HAVE_MISRA
 /* removed */

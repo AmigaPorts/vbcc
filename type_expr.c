@@ -1,4 +1,4 @@
-/*  $VER: vbcc (type_expr.c) $Revision: 1.64 $   */
+/*  $VER: vbcc (type_expr.c) $Revision: 1.76 $   */
 
 #include "vbc.h"
 
@@ -34,6 +34,7 @@ static char FILE_[]=__FILE__;
 #define USEREXP  (1L<<24)
 
 int alg_opt(np,type *);
+int check_float(np);
 void simple_alg_opt(np);
 int test_assignment(type *,np);
 int type_expression2(np,type *);
@@ -41,11 +42,17 @@ void make_cexpr(np);
 
 int dontopt;
 int no_cast_free;
+int no_alg_opt;
 
+type sct={CHAR};
+type sst={SHORT};
+type sit={INT};
+type slt={LONG};
 type uct={UNSIGNED|CHAR};
 type ust={UNSIGNED|SHORT};
 type uit={UNSIGNED|INT};
 type ult={UNSIGNED|LONG};
+
 
 #ifdef HAVE_ECPP
 /* removed */
@@ -574,6 +581,7 @@ static int decide_shortcut(np p,type *ttyp)
      )
     return 0;
   ttf&=NQ;
+  if(ISPOINTER(ttf)) return 0;
   if(ttf<INT) return 1;
   if(zm2l(sizetab[ttf])<zm2l(sizetab[(p->left->ntyp->flags&NQ)])) return 1;
   if(zm2l(sizetab[ttf])<zm2l(sizetab[(p->right->ntyp->flags&NQ)])) return 1;
@@ -584,10 +592,20 @@ static int decide_shortcut(np p,type *ttyp)
 
 static type *best_addi2pt(zmax sz)
 {
-  if(!zmeqto(sizetab[CHAR],sizetab[INT])&&!zmeqto(sz,Z0)&&MINADDI2P<=CHAR&&zumleq(zm2zum(sz),zumadd(tu_max[CHAR],ZU1))){
-    return &uct;
-  }else if(!zmeqto(sizetab[SHORT],sizetab[INT])&&!zmeqto(sz,Z0)&&MINADDI2P<=SHORT&&zumleq(zm2zum(sz),zumadd(tu_max[SHORT],ZU1))){
-    return &ust;
+  if(!array_workaround){
+    if(!zmeqto(sizetab[CHAR],sizetab[INT])&&!zmeqto(sz,Z0)&&MINADDUI2P<=(UNSIGNED|CHAR)&&zumleq(zm2zum(sz),zumadd(tu_max[CHAR],ZU1))){
+      return &uct;
+    }else if(!zmeqto(sizetab[CHAR],sizetab[INT])&&!zmeqto(sz,Z0)&&MINADDI2P<=CHAR&&zumleq(sz,zmadd(t_max[CHAR],Z1))){
+      return &sct;
+    }else if(!zmeqto(sizetab[SHORT],sizetab[INT])&&!zmeqto(sz,Z0)&&MINADDUI2P<=(UNSIGNED|SHORT)&&zumleq(zm2zum(sz),zumadd(tu_max[SHORT],ZU1))){
+      return &ust;
+    }else if(!zmeqto(sizetab[SHORT],sizetab[INT])&&!zmeqto(sz,Z0)&&MINADDI2P<=SHORT&&zmleq(sz,zmadd(t_max[SHORT],Z1))){
+      return &sst;
+    }else if((!HAVE_INT_SIZET)&&!zmeqto(sizetab[INT],sizetab[LONG])&&!zmeqto(sz,Z0)&&MINADDUI2P<=(UNSIGNED|INT)&&zumleq(zm2zum(sz),zumadd(tu_max[INT],ZU1))){
+      return &uit;
+    }else if(!(HAVE_INT_SIZET)&&!zmeqto(sizetab[INT],sizetab[LONG])&&!zmeqto(sz,Z0)&&MINADDI2P<=INT&&zmleq(sz,zmadd(t_max[INT],Z1))){
+      return &sit;
+    }
   }
   return 0;
 }
@@ -739,6 +757,11 @@ int type_expression2(np p,type *ttyp)
     }
   }
   if(!shorttyp&&(f==LAND||f==LOR)&&p->left->flags==AND) shorttyp=andcomp(p->left,0);
+  if(shorttyp){
+    /* no shortcut if floating point is involved */
+    if(p->left&&check_float(p->left)) shorttyp=0;
+    else if(p->right&&check_float(p->right)) shorttyp=0;
+  }
   if(p->left&&p->flags!=ASSIGNOP){
     struct_declaration *sd;
     /*  bei ASSIGNOP wird der linke Zweig durch den Link bewertet  */
@@ -938,7 +961,7 @@ int type_expression2(np p,type *ttyp)
 	}
       }
     }
-    if(v==0){error(82,p->identifier);return(0);}
+    if(v==0||v->storage_class==TYPEDEF){error(82,p->identifier);return(0);}
     if(disallow_statics&&v->storage_class==STATIC&&v->nesting==0&&*v->identifier){
       error(302,v->identifier);
       return 0;
@@ -962,7 +985,8 @@ int type_expression2(np p,type *ttyp)
       p->ntyp->flags=CONST|INT;
     }
     p->o.v=v;
-    if (p->ntyp->flags&VOLATILE) p->sidefx=1; /* Touching a volatile may have side effects */
+    if (!(f&CONSTADDR)&&(p->ntyp->flags&VOLATILE)) 
+      p->sidefx=1; /* Touching a volatile may have side effects */
     return 1;
   }
 
@@ -973,9 +997,7 @@ int type_expression2(np p,type *ttyp)
     return 1;
   }
 
-  if(f==BITFIELD) return 1;
-
-  if(f==LITERAL){
+  if(f==LITERAL||f==BITFIELD){
     p->lvalue=1;
     return 1;
   }
@@ -1058,8 +1080,8 @@ int type_expression2(np p,type *ttyp)
       p->ntyp=clone_typ(p->right->ntyp);
       return ok;
     }
-    if(!ISINT(p->left->ntyp->flags)){error(90);return 0;}
-    if(!ISINT(p->right->ntyp->flags)){error(90);return 0;}
+    if(!ISINT(p->left->ntyp->flags)){p->left->ntyp->next=0;error(90);return 0;}
+    if(!ISINT(p->right->ntyp->flags)){p->right->ntyp->next=0;error(90);return 0;}
 #ifdef HAVE_MISRA
 /* removed */
 /* removed */
@@ -1294,19 +1316,14 @@ int type_expression2(np p,type *ttyp)
 	      new->right->flags=PCEXPR;
 	      sz=szof(p->left->ntyp->next);
 	      if(zmeqto(l2zm(0L),sz)) error(78);
-#if HAVE_INT_SIZET
-	      new->right->val.vint=zm2zi(sz);
-#else
-	      new->right->val.vlong=zm2zl(sz);
-#endif
+	      if(HAVE_INT_SIZET)
+		new->right->val.vint=zm2zi(sz);
+	      else
+		new->right->val.vlong=zm2zl(sz);
 	    }
 	    new->right->left=new->right->right=0;
 	    new->right->ntyp=new_typ();
-#if HAVE_INT_SIZET
-	    new->right->ntyp->flags=INT;
-#else
-	    new->right->ntyp->flags=LONG;
-#endif
+	    new->right->ntyp->flags=HAVE_INT_SIZET?INT:LONG;
 	    p->right=new;
 #ifdef MAXADDI2P
 	    ok&=type_expression2(new,(shorttyp&&(shorttyp->flags&NQ)<MAXADDI2P)?shorttyp:&pmt);
@@ -1341,19 +1358,14 @@ int type_expression2(np p,type *ttyp)
 	    new->right->flags=PCEXPR;
 	    sz=szof(p->right->ntyp->next);
 	    if(zmeqto(l2zm(0L),sz)) error(78);
-#if HAVE_INT_SIZET
-	    new->right->val.vint=zm2zi(sz);
-#else
-	    new->right->val.vlong=zm2zl(sz);
-#endif
+	    if(HAVE_INT_SIZET)
+	      new->right->val.vint=zm2zi(sz);
+	    else
+	      new->right->val.vlong=zm2zl(sz);
 	  }
 	  new->right->left=new->right->right=0;
 	  new->right->ntyp=new_typ();
-#if HAVE_INT_SIZET
-	  new->right->ntyp->flags=INT;
-#else
-	  new->right->ntyp->flags=LONG;
-#endif
+	  new->right->ntyp->flags=HAVE_INT_SIZET?INT:LONG;
 	  p->left=new;
 #ifdef MAXADDI2P
 	  ok&=type_expression2(new,&pmt);
@@ -1649,7 +1661,8 @@ int type_expression2(np p,type *ttyp)
 	free(merk);
       }
     }
-    if (p->ntyp->flags&VOLATILE) p->sidefx=1;
+    if (p->ntyp->flags&VOLATILE)
+      p->sidefx=1;
     return ok;
   }
   if(f==FIRSTELEMENT){
@@ -1692,12 +1705,8 @@ int type_expression2(np p,type *ttyp)
     int i,n=-1;
     struct_list *sl=0;
     if(!ecpp){
-      for(i=0;i<p->left->ntyp->exact->count;i++)
-	if(!strcmp((*p->left->ntyp->exact->sl)[i].identifier,p->right->identifier)) n=i;
-      if(n<0)
-        return 0;
-      else
-        sl=&(*p->left->ntyp->exact->sl)[n];
+      sl=find_member(p->right->identifier,p->left->ntyp->exact);
+      if(!sl) return 0;
     }
 #ifdef HAVE_ECPP
 /* removed */
@@ -1738,22 +1747,20 @@ int type_expression2(np p,type *ttyp)
     if(!p->left->ntyp->exact) ierror(0);
     if(!sl->styp) ierror(0);
     p->ntyp->next=clone_typ(sl->styp);
+    p->ntyp->next->flags|=p->left->ntyp->flags&(CONST|VOLATILE);
     p->ntyp->flags=ptype(p->left);
     fix_addr_ptype(p);
     return ok;
   }
   if(f==DSTRUCT){
     struct_declaration *sd=p->left->ntyp->exact;
+    struct struct_list *sl;
     char *identifier=p->right->identifier;
     int i=0,f,bfs=-1,bfo=-1;type *t;np new;zmax offset=l2zm(0L);
     if(!ISSTRUCT(p->left->ntyp->flags)&&!ISUNION(p->left->ntyp->flags))
       {error(8);return 0;}
     if(type_uncomplete(p->left->ntyp)){error(11);return 0;}
     if(p->right->flags!=MEMBER) ierror(0);
-    if(i>=p->left->ntyp->exact->count) {error(23,p->right->identifier);return 0;}
-    if(!ecpp){
-      offset=struct_offset(sd,identifier);
-    }
 #ifdef HAVE_ECPP
 /* removed */
 /* removed */
@@ -1805,7 +1812,7 @@ int type_expression2(np p,type *ttyp)
 /* removed */
 /* removed */
 #endif
-    if(ISUNION(p->left->ntyp->flags)) offset=l2zm(0L);
+    offset=struct_offset(sd,identifier,p->left->ntyp->flags);
     p->flags=CONTENT;
     if(p->ntyp) {freetyp(p->ntyp);p->ntyp=0;}
     new=new_node();
@@ -1832,12 +1839,16 @@ int type_expression2(np p,type *ttyp)
 
     /* Check for bitfields */
     i=0;
+#if 0
+    printf("f1 %p\n",find_member(identifier,sd));
     while(i<sd->count&&strcmp((*sd->sl)[i].identifier,identifier)){
       i++;
     }
-    if(i<sd->count){
-      bfo=(*sd->sl)[i].bfoffset;
-      bfs=(*sd->sl)[i].bfsize;
+#endif
+    sl=find_member(identifier,sd);
+    if(sl){
+      bfo=sl->bfoffset;
+      bfs=sl->bfsize;
     }else
       bfs=-1;
     if(bfs!=-1){
@@ -1914,6 +1925,7 @@ int type_expression2(np p,type *ttyp)
 	if(!type_expression2(al->arg,(short_push&&i<sd->count)?(*sd->sl)[i].styp:0)) return 0;
 	al->arg=makepointer(al->arg);
 	if(type_uncomplete(al->arg->ntyp)) error(39);
+	if((al->arg->ntyp->flags&NQ)==VOID){ error(39);return 0;}
 	al=al->next;
 	i++;
       }
@@ -1985,11 +1997,7 @@ int type_expression2(np p,type *ttyp)
 	    }
 	    /*FIXME: assumes intmax_t==long long */
 	    if(fflags=='j') {mask|=USESPEC;fflags=LL;}
-#if HAVE_INT_SIZET	    
-	    if(fflags=='z') {mask|=USESPEC;fflags=' ';}
-#else
-	    if(fflags=='z') {mask|=USESPEC;fflags='l';}
-#endif
+	    if(fflags=='z') {mask|=USESPEC;fflags=HAVE_INT_SIZET?' ':'l';}
 	    if(fflags=='t'){
 	      mask|=USESPEC;
 	      if(PTRDIFF_T(CHAR)==LLONG)
@@ -2128,6 +2136,7 @@ int type_expression2(np p,type *ttyp)
 		if(fflags==' '&&at!=INT){error(214);return ok;}
 		if(fflags=='l'&&at!=LONG){error(214);return ok;}
 		if(fflags==LL&&at!=LLONG){error(214);return ok;}
+		mask|=lflag;
 		break;
 	      case 'x':
 	      case 'u':
@@ -2137,6 +2146,7 @@ int type_expression2(np p,type *ttyp)
 		if(fflags==' '&&at!=(UNSIGNED|INT)){error(214);return ok;}
 		if(fflags=='l'&&at!=(UNSIGNED|LONG)){error(214);return ok;}
 		if(fflags==LL&&at!=(UNSIGNED|LLONG)){error(214);return ok;}
+		mask|=lflag;
 		break;
 	      case 'e':
 	      case 'f':
@@ -2163,7 +2173,7 @@ int type_expression2(np p,type *ttyp)
 	  if(mask_opt){
 	    Var *v;char repl[MAXI+16];
 	    if(mask){
-	      sprintf(repl,"%s.%lu",s,1L);
+	      sprintf(repl,"%s.%lu",s,1UL);
 	      v=find_var(repl,0);
 	      if(!v){
 		type *t;
@@ -2173,7 +2183,7 @@ int type_expression2(np p,type *ttyp)
 	      }
 	    }
 	    if(mask)
-	      sprintf(repl,"%s.%lu",(flags&PRINTFLIKE)?"vfprintf":"vfscanf",mask);
+	      sprintf(repl,"%s.%lu",(flags&PRINTFLIKE)?"vfprintf":"vfscanf",(unsigned long)mask);
 	    else
 	      sprintf(repl,"%s",(flags&PRINTFLIKE)?"vfprintf":"vfscanf");
 	    needs(repl);
@@ -2309,6 +2319,23 @@ np makepointer(np p)
       return p;
 }
 
+/* check if the tree has float type */
+int check_float(np p)
+{
+  int f=p->flags;
+  if(f==IDENTIFIER){
+    Var *v=find_var(p->identifier,0);
+    if(!v) return 0; /* implicitly int function */
+    return ISFLOAT(v->vtyp->flags);
+  }
+  if(f==CAST||f==CEXPR||f==PCEXPR){
+    return ISFLOAT(p->ntyp->flags);
+  }
+  if(p->left&&check_float(p->left)) return 1;
+  if(p->right&&check_float(p->right)) return 1;
+  return 0;
+}
+
 void simple_alg_opt(np p)
 {
   int c=0,f,t=0;
@@ -2316,7 +2343,7 @@ void simple_alg_opt(np p)
   zumax u1,u2;zmax s1,s2;
   Var *v;
 
-  if(!p) return;
+  if(!p||no_alg_opt) return;
 
   f=p->flags;
 
@@ -2459,6 +2486,9 @@ int alg_opt(np p,type *ttyp)
 {
     int c=0,f,komm,null1,null2,eins1,eins2;np merk;
     zldouble d1,d2;zumax u1,u2;zmax s1,s2;
+
+    if(no_alg_opt) return 1;
+
     f=p->flags;
     
     /* do not optimze pointer-pointer */
@@ -2583,7 +2613,7 @@ int alg_opt(np p,type *ttyp)
     }
     if(c==2){
         /*  a+0=a-0=a^0=a>>0=a<<0=a*1=a/1=a   */
-        if(((eins2==1&&(f==MULT||f==PMULT||f==DIV))||(null2&&(f==ADD||f==SUB||f==OR||f==XOR||f==LSHIFT||f==RSHIFT)))&&!p->right->sidefx){
+      if(((eins2==1&&(f==MULT||f==PMULT||f==DIV))||(null2&&(f==ADD||f==SUB||f==OR||f==XOR||f==LSHIFT||f==RSHIFT)))&&!p->right->sidefx&&(!ISPOINTER(p->ntyp->flags)||ISPOINTER(p->left->ntyp->flags))){
             if(DEBUG&1){if(f==MULT||f==PMULT||f==DIV) printf("a*/1->a\n"); else printf("a+-^0->a\n");}
             free_expression(p->right);
             merk=p->left;
@@ -2741,7 +2771,7 @@ int test_assignment(type *zt,np q)
         error(38);
       return 0;
     }else 
-  return 1;
+      return 1;
   }
   if(ISVECTOR(zt->flags)&&(zt->flags&NU)==(qt->flags&NU)){
       return 1;

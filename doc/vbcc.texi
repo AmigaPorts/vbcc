@@ -8,13 +8,13 @@
 @setfilename index.texi
 @settitle vbcc manual
 @setchapternewpage odd
-@set UPDATED February 2022
+@set UPDATED December 2025
 
 @ifinfo
 
 This is the manual for the vbcc compiler system.
 
-Copyright 1995-2022 Volker Barthelmann
+Copyright 1995-2025 Volker Barthelmann
 
 @end ifinfo
 
@@ -76,7 +76,7 @@ Copyright 1995-2022 Volker Barthelmann
 
 @section Legal
 
-    vbcc is copyright in 1995-2022 by Volker Barthelmann.
+    vbcc is copyright in 1995-2025 by Volker Barthelmann.
 
     This archive may be redistributed without modifications and used
     for non-commercial purposes.
@@ -183,6 +183,11 @@ The vbcc directory tree looks as follows:
         setenv PATH <prefix>/vbcc/bin:"$PATH"
         @end example
 
+    @item Optional: When adding OS-headers to the search path, do that
+        preferably in the appropriate config file
+        (@file{<prefix>/vbcc/config/<name>}) with a @option{-I}
+        option, after the target's include path.
+
     @end enumerate
 
 
@@ -203,6 +208,11 @@ The vbcc directory tree looks as follows:
         @example
         set PATH=<prefix>\vbcc\bin;%PATH%
         @end example
+
+    @item Optional: When adding OS-headers to the search path, do that
+        preferably in the appropriate config file
+        (@file{<prefix>\vbcc\config\<name>}) with a @option{-I}
+        option, after the target's include path.
 
     @end enumerate
 
@@ -435,6 +445,13 @@ assign >NIL: vlibwos: vbcc:target/ppc-warpos/lib
 @chapter 6502 Backend
 @include vbcc6502.texi
 
+@node 65816 Backend
+@chapter 65816 Backend
+@include vbcc65816.texi
+
+@node unSP Backend
+@chapter unSP Backend
+@include vbccunsp.texi
 
 @node Instruction Scheduler
 @chapter Instruction Scheduler

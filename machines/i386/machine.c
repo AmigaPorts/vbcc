@@ -1253,11 +1253,11 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 		cwr=p->z.reg;
 	      else
 		cwr=get_reg(f,p,CHAR);
-	      emit(f,"\tfnstcw\t%d(%s)\n",loff-4-stackoffset,regnames[sp]);
-	      emit(f,"\tmovw\t%d(%s),%%%s\n",loff-4-stackoffset,regnames[sp],regnames[cwr]+2);
+	      emit(f,"\tfnstcw\t%ld(%s)\n",loff-4-stackoffset,regnames[sp]);
+	      emit(f,"\tmovw\t%ld(%s),%%%s\n",loff-4-stackoffset,regnames[sp],regnames[cwr]+2);
 	      emit(f,"\tmovb\t$12,%%%ch\n",regnames[cwr][2]);
-	      emit(f,"\tmovw\t%%%s,%d(%s)\n",regnames[cwr]+2,loff-2-stackoffset,regnames[sp]);
-	      emit(f,"\tfldcw\t%d(%s)\n",loff-2-stackoffset,regnames[sp]);
+	      emit(f,"\tmovw\t%%%s,%ld(%s)\n",regnames[cwr]+2,loff-2-stackoffset,regnames[sp]);
+	      emit(f,"\tfldcw\t%ld(%s)\n",loff-2-stackoffset,regnames[sp]);
 	      if(isreg(q1)&&fst[0]==p->q1.reg){
 		if((t&NQ)==CHAR){
 		  if(isreg(z)) reg=p->z.reg; else reg=get_reg(f,p,CHAR);
@@ -1294,7 +1294,7 @@ void gen_code(FILE *f,struct IC *p,struct Var *v,zmax offset)
 		  }
 		}
 	      }
-	      emit(f,"\tfldcw\t%d(%s)\n",loff-4-stackoffset,regnames[sp]);
+	      emit(f,"\tfldcw\t%ld(%s)\n",loff-4-stackoffset,regnames[sp]);
 	      continue;
             }
 pric2(stdout,p);

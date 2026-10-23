@@ -1,4 +1,4 @@
-/*  $VER: vbcc (vbc.h) $Revision: 1.23 $    */
+/*  $VER: vbcc (vbc.h) $Revision: 1.26 $    */
 
 #include "supp.h"
 
@@ -119,10 +119,12 @@ extern void needs(char *s);
 
 extern int usz;
 
-extern int c99;
+extern int c99,c11;
 extern int opencl;
 extern int merge_strings;
 extern int mask_opt;
+extern int array_workaround;
+extern int nobins;
 extern int disallow_statics;
 extern int header_cnt;
 extern int softfloat;
@@ -192,7 +194,7 @@ extern void scratch_var(struct obj *,int,type *);
 extern void get_scratch(struct obj *,int,int,type *);
 extern void gen_cond(struct obj *,int,int,int);
 
-#define MAXCF 70
+#define MAXCF 80
 extern int c_flags[MAXCF];
 extern char *c_flags_name[MAXCF];
 extern union ppi c_flags_val[MAXCF];

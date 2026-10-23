@@ -1,4 +1,4 @@
-/*  $VER: vbcc (opt.h) $Revision: 1.4 $    */
+/*  $VER: vbcc (opt.h) $Revision: 1.6 $    */
 
 #include "supp.h"
 
@@ -48,7 +48,7 @@ extern bvtype *cp_globals,*cp_address,*cp_statics,*cp_drefs,*cp_act,*cp_dest;
 extern bvtype **copies;
 
 extern int have_alias;
-extern int static_cse,dref_cse;
+extern int static_cse,dref_cse,addr_vkonst;
 
 typedef struct {
   union atyps min,max;
@@ -153,6 +153,8 @@ int loops(flowgraph *fg,int mode);
 flowgraph *create_loop_headers(flowgraph *fg,int av);
 flowgraph *create_loop_footers(flowgraph *fg,int av);
 void insert_regs(flowgraph *fg);
+int exit_save(flowgraph *,int);
+int entry_load(flowgraph *,int);
 void recalc_offsets(flowgraph *fg);
 void optimize(long flags,Var *function);
 int loop_optimizations(flowgraph *fg);

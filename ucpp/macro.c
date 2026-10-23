@@ -1857,7 +1857,7 @@ int handle_ifndef(struct lexer_state *ls)
 void init_macros(void)
 {
 	if (macros) killHT(macros);
-	macros = newHT(128, cmp_struct, hash_struct, del_macro);
+	macros = newHT(16384, cmp_struct, hash_struct, del_macro);
 	if (!no_special_macros) add_special_macros();
 }
 
