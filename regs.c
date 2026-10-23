@@ -1,4 +1,4 @@
-/*  $VER: vbcc (regs.c) $Revision: 1.39 $   */
+/*  $VER: vbcc (regs.c) $Revision: 1.40 $   */
 /*  Registerzuteilung           */
 
 #include "opt.h"
@@ -1316,7 +1316,7 @@ int find_best_local_reg(IC *fp,Var *v,int preferred)
     used=0;
     if((p->q1.flags&VAR)&&p->q1.v==v){
       if(p->code==ADDRESS) return 0;
-      if((p->code==ASSIGN||p->code==PUSH)&&(q1typ(p)&NQ)==(CHAR)&&!zmeqto(p->q2.val.vmax,l2zm(1L)))
+      if((p->code==ASSIGN||p->code==PUSH)&&(q1typ(p)&NQ)==(CHAR)&&!zmeqto(p->q2.val.vmax,l2zm(1L))&&!(p->q1.flags&DREFOBJ))
 	return 0;
       used=1;
       for(r=1;r<=MAXR;r++){
@@ -1342,7 +1342,7 @@ int find_best_local_reg(IC *fp,Var *v,int preferred)
       }
     }
     if((p->z.flags&VAR)&&p->z.v==v){
-      if(p->code==ASSIGN&&(ztyp(p)&NQ)==(CHAR)&&!zmeqto(p->q2.val.vmax,l2zm(1L)))
+      if(p->code==ASSIGN&&(ztyp(p)&NQ)==(CHAR)&&!zmeqto(p->q2.val.vmax,l2zm(1L))&&!(p->z.flags&DREFOBJ))
 	return 0;
       for(r=1;r<=MAXR;r++){
 	if(savings[r]!=INT_MIN){
