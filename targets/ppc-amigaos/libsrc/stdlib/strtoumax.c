@@ -1,0 +1,56 @@
+#include <stdio.h>
+#include <ctype.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <inttypes.h>
+
+uintmax_t strtoumax(const char *nptr,char **endptr,int base)
+{ const char *p=nptr,*q;
+  char c=0;
+  uintmax_t r=0;
+  if(base<0||base==1||base>36)
+  { if(endptr!=NULL)
+      *endptr=(char *)nptr;
+    return 0;
+  }
+  while(isspace((unsigned char)*p))
+    p++;
+  if(*p=='-'||*p=='+')
+    c=*p++;
+  if(base==0)
+  { if(p[0]=='0')
+    { if(tolower((unsigned char)p[1])=='x'&&isxdigit((unsigned char)p[2]))
+      { p+=2;
+        base=16; }
+      else
+        base=8;
+    }else
+      base=10;
+  }
+  q=p;
+  for(;;)
+  { int a;
+    if(!isalnum((unsigned char)*q))
+      break;
+    a=isdigit((unsigned char)*q)?*q-'0':tolower((unsigned char)*q)-('a'-10);
+    if(a>=base)
+      break;
+    if(r>(UINTMAX_MAX-a)/base||r*base>UINTMAX_MAX-a)
+    { errno=ERANGE; /* overflow */
+      r=UINTMAX_MAX; }
+    else
+      r=r*base+a;
+    q++;
+  }
+  if(q==p) /* Not a single number read */
+  { if(endptr!=NULL)
+      *endptr=(char *)nptr;
+    return 0;
+  }
+  if(c=='-')
+    r=-r;
+  if(endptr!=NULL)
+    *endptr=(char *)q;
+  return r;
+}
