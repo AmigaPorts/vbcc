@@ -1,0 +1,184 @@
+# The libraries and interfaces libauto and libraauto open for a program that
+# uses them.  The Makefile compiles one object per entry from a template:
+#
+# lib   <Base>  <library name>  <libs>
+#       -> <Base>.o    lib.c: _INIT_5_/_EXIT_5_<Base>, OpenLibrary(name, _<Base>Ver)
+#       -> <Base>Ver.o ver.c: _<Base>Ver (0 = any version; a program may define its own)
+# iface <IName> <Base> <interface name> <version> <libs>
+#       -> <IName>.o   iface.c: _INIT_6_/_EXIT_6_<IName>, GetInterface(<Base>, name, version)
+#
+# <libs> lists the libraries a member goes into: auto = libauto, raauto = libraauto.
+# Devices and resources are opened with OpenLibrary() like everything else,
+# and the names are kept as they were (include/cardres.library, usbfd.fd, ...).
+
+lib   AIN_Base           amigainput.library                 auto
+lib   AmigaGuideBase     amigaguide.library                 auto
+lib   ApplicationBase    application.library                auto
+lib   ARexxBase          arexx.class                        auto,raauto
+lib   AslBase            asl.library                        auto
+lib   BevelBase          images/bevel.image                 auto,raauto
+lib   BitMapBase         images/bitmap.image                auto,raauto
+lib   BlankerModule      blankermodule.library              auto
+lib   BulletBase         bullet.library                     auto
+lib   ButtonBase         gadgets/button.gadget              auto,raauto
+lib   CamdBase           camd.library                       auto
+lib   CardResource       include/cardres.library            auto
+lib   CheckBoxBase       gadgets/checkbox.gadget            auto,raauto
+lib   ChooserBase        gadgets/chooser.gadget             auto,raauto
+lib   ClickTabBase       gadgets/clicktab.gadget            auto,raauto
+lib   ColorWheelBase     gadgets/colorwheel.gadget          auto,raauto
+lib   ConsoleDevice      console.device                     auto
+lib   CxBase             commodities.library                auto
+lib   CyberGfxBase       cybergraphics.library              auto
+lib   DataTypesBase      datatypes.library                  auto
+lib   DateBrowserBase    gadgets/datebrowser.gadget         auto
+lib   DiskfontBase       diskfont.library                   auto
+lib   Docky              docky.library                      auto
+lib   DOSBase            dos.library                        auto
+lib   DrawListBase       images/drawlist.image              auto,raauto
+lib   DTClassBase        dtclass.class                      auto,raauto
+lib   ElfBase            elf.library                        auto
+lib   ExpansionBase      expansion.library                  auto
+lib   FillerBase         images/filler.image                auto
+lib   FuelGaugeBase      gadgets/fuelgauge.gadget           auto,raauto
+lib   GadToolsBase       gadtools.library                   auto
+lib   GetColorBase       gadgets/getcolor.gadget            auto
+lib   GetFileBase        gadgets/getfile.gadget             auto,raauto
+lib   GetFontBase        gadgets/getfont.gadget             auto,raauto
+lib   GetScreenModeBase  gadgets/getscreenmode.gadget       auto,raauto
+lib   GfxBase            graphics.library                   auto
+lib   GlyphBase          images/glyph.image                 auto,raauto
+lib   HunkBase           hunk.library                       auto
+lib   IconBase           icon.library                       auto
+lib   IconModuleBase     iconmodules/generic.iconmodule     auto
+lib   IFFParseBase       iffparse.library                   auto
+lib   InputBase          input.device                       auto
+lib   IntegerBase        gadgets/integer.gadget             auto,raauto
+lib   IntuitionBase      intuition.library                  auto
+lib   KeymapBase         keymap.library                     auto
+lib   LabelBase          images/label.image                 auto,raauto
+lib   LayersBase         layers.library                     auto
+lib   LayoutBase         gadgets/layout.gadget              auto,raauto
+lib   ListBrowserBase    gadgets/listbrowser.gadget         auto,raauto
+lib   LocaleBase         locale.library                     auto
+lib   LowLevelBase       lowlevel.library                   auto
+lib   NVBase             nonvolatile.library                auto
+lib   P96Base            Picasso96API.library               auto
+lib   PaletteBase        gadgets/palette.gadget             auto
+lib   PartitionBase      gadgets/partition.gadget           auto
+lib   PenMapBase         images/penmap.image                auto,raauto
+lib   PictureBase        datatypes/picture.datatype         auto
+lib   PopupMenuBase      popupmenu.class                    auto,raauto
+lib   RadioButtonBase    gadgets/radiobutton.gadget         auto,raauto
+lib   RequesterBase      requester.class                    auto,raauto
+lib   RexxSysBase        rexxsyslib.library                 auto
+lib   ScreenBlanker      screenblanker.library              auto,raauto
+lib   ScrollerBase       gadgets/scroller.gadget            auto,raauto
+lib   SketchBoardBase    gadgets/sketchboard.gadget         auto,raauto
+lib   SliderBase         gadgets/slider.gadget              auto,raauto
+lib   SocketBase         bsdsocket.library                  auto
+lib   SpaceBase          gadgets/space.gadget               auto,raauto
+lib   SpeedBarBase       gadgets/speedbar.gadget            auto,raauto
+lib   StringBase         gadgets/string.gadget              auto,raauto
+lib   TextClipBase       textclip.library                   auto,raauto
+lib   TextEditorBase     gadgets/texteditor.gadget          auto,raauto
+lib   TimerBase          timer.device                       auto
+lib   TimesyncBase       timesync.library                   auto
+lib   TimezoneBase       timezone.library                   auto
+lib   USBFDBase          usbfd.fd                           auto
+lib   USBHCDBase         usbhcd.hcd                         auto
+lib   USBSysBase         usbsys.device                      auto
+lib   UserGroupBase      usergroup.library                  auto
+lib   UtilityBase        utility.library                    auto
+lib   VirtualBase        gadgets/virtual.gadget             auto,raauto
+lib   Warp3DBase         Warp3D.library                     auto
+lib   WindowBase         window.class                       auto,raauto
+lib   WorkbenchBase      workbench.library                  auto
+
+iface IAIN_            AIN_Base           main           1 auto
+iface IAmigaGuide      AmigaGuideBase     main           1 auto
+iface IApplication     ApplicationBase    application    2 auto
+iface IARexx           ARexxBase          main           1 auto,raauto
+iface IAsl             AslBase            main           1 auto
+iface IBevel           BevelBase          main           1 auto,raauto
+iface IBitMap          BitMapBase         main           1 auto,raauto
+iface IBlankerModule   BlankerModule      blankermodule  1 auto
+iface IBullet          BulletBase         main           1 auto
+iface IButton          ButtonBase         main           1 auto,raauto
+iface ICamd            CamdBase           main           1 auto
+iface ICard            CardResource       main           1 auto
+iface ICheckBox        CheckBoxBase       main           1 auto,raauto
+iface IChooser         ChooserBase        main           1 auto,raauto
+iface IClickTab        ClickTabBase       main           1 auto,raauto
+iface IColorWheel      ColorWheelBase     main           1 auto,raauto
+iface ICommodities     CxBase             main           1 auto
+iface IConsole         ConsoleDevice      main           1 auto
+iface ICyberGfx        CyberGfxBase       main           1 auto
+iface IDataTypes       DataTypesBase      main           1 auto
+iface IDateBrowser     DateBrowserBase    main           1 auto
+iface IDiskfont        DiskfontBase       main           1 auto
+iface IDocky           Docky              docky          1 auto
+iface IDOS             DOSBase            main           1 auto
+iface IDrawList        DrawListBase       main           1 auto,raauto
+iface IDTClass         DTClassBase        main           1 auto,raauto
+iface IElf             ElfBase            main           1 auto
+iface IExpansion       ExpansionBase      main           1 auto
+iface IFiller          FillerBase         main           1 auto
+iface IFuelGauge       FuelGaugeBase      main           1 auto,raauto
+iface IGadTools        GadToolsBase       main           1 auto
+iface IGetColor        GetColorBase       main           1 auto
+iface IGetFile         GetFileBase        main           1 auto,raauto
+iface IGetFont         GetFontBase        main           1 auto,raauto
+iface IGetScreenMode   GetScreenModeBase  main           1 auto,raauto
+iface IGlyph           GlyphBase          main           1 auto,raauto
+iface IGraphics        GfxBase            main           1 auto
+iface IHunk            HunkBase           main           1 auto
+iface IIcon            IconBase           main           1 auto
+iface IIconModule      IconModuleBase     main           1 auto
+iface IIFFParse        IFFParseBase       main           1 auto
+iface IInput           InputBase          main           1 auto
+iface IInteger         IntegerBase        main           1 auto,raauto
+iface IIntuition       IntuitionBase      main           1 auto
+iface IKeymap          KeymapBase         main           1 auto
+iface ILabel           LabelBase          main           1 auto,raauto
+iface ILayers          LayersBase         main           1 auto
+iface ILayout          LayoutBase         main           1 auto,raauto
+iface IListBrowser     ListBrowserBase    main           1 auto,raauto
+iface ILocale          LocaleBase         main           1 auto
+iface ILowLevel        LowLevelBase       main           1 auto
+iface INV              NVBase             main           1 auto
+iface IP96             P96Base            main           1 auto
+iface IPalette         PaletteBase        main           1 auto
+iface IPartition       PartitionBase      main           1 auto
+iface IPCI             ExpansionBase      pci            1 auto
+iface IPCIDev          ExpansionBase      pci_device     1 auto
+iface IPenMap          PenMapBase         main           1 auto,raauto
+iface IPicture         PictureBase        main           1 auto
+iface IPixie           GfxBase            pixie          1 auto
+iface IPopupMenu       PopupMenuBase      main           1 auto,raauto
+iface IPrefsObjects    ApplicationBase    prefsobjects   2 auto
+iface IRadioButton     RadioButtonBase    main           1 auto,raauto
+iface IRequester       RequesterBase      main           1 auto,raauto
+iface IRexxSys         RexxSysBase        main           1 auto
+iface IScreenBlanker   ScreenBlanker      main           1 auto,raauto
+iface IScroller        ScrollerBase       main           1 auto,raauto
+iface ISketchBoard     SketchBoardBase    main           1 auto,raauto
+iface ISlider          SliderBase         main           1 auto,raauto
+iface ISocket          SocketBase         main           1 auto
+iface ISpace           SpaceBase          main           1 auto,raauto
+iface ISpeedBar        SpeedBarBase       main           1 auto,raauto
+iface IString          StringBase         main           1 auto,raauto
+iface ITextClip        TextClipBase       main           1 auto,raauto
+iface ITextEditor      TextEditorBase     main           1 auto,raauto
+iface ITimer           TimerBase          main           1 auto
+iface ITimesync        TimesyncBase       main           1 auto
+iface ITimezone        TimezoneBase       main           1 auto
+iface IUSBFD           USBFDBase          main           1 auto
+iface IUSBHCD          USBHCDBase         main           1 auto
+iface IUSBSys          USBSysBase         main           1 auto
+iface IUserGroup       UserGroupBase      main           1 auto
+iface IUtility         UtilityBase        main           1 auto
+iface IVirtual         VirtualBase        main           1 auto,raauto
+iface IWarp3D          Warp3DBase         main           1 auto
+iface IWindow          WindowBase         main           1 auto,raauto
+iface IWorkbench       WorkbenchBase      main           1 auto

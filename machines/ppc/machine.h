@@ -135,3 +135,9 @@ struct ext_ic {
                           "\tstw\t0,0(1)"
 #define OLDSPVLA_INLINEASM "\tmr\t3,1"
 #define FPVLA_REG 32
+
+/* AmigaOS 4 calling conventions: the frontend passes the interface as
+   Self to calls through struct members of an __aos4libcall type
+   (IExec->OpenLibrary(...)), and reg_parm() passes the variadic
+   arguments of __linearvarargs functions on the stack.  */
+#define HAVE_AOS4 1
