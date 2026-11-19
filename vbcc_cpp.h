@@ -44,4 +44,4 @@ extern lexer_state ls;
 #define ttMWS(x)        ((x) == NONE || (x) == COMMENT || (x) == OPT_NONE)
 #define ttWHI(x)        (ttMWS(x) || (x) == NEWLINE)
 
-char *ucpp_token_name();
+char *ucpp_token_name(struct token *);

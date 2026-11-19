@@ -74,8 +74,10 @@ extern int is_keyword(char *);
 extern void pre(FILE *,np),pra(FILE *,struct argument_list *);
 extern void free_expression(np),free_alist(struct argument_list *);
 extern void cpbez(char *m,int ckw),cpnum(char *m),killsp(void);
-extern void copy_token(/*no prototype because cpp.h not always included*/);
-extern void push_token(/*no prototype because cpp.h not always included*/);
+/* struct token is ucpp's (cpp.h), which isn't always included */
+struct token;
+extern void copy_token(struct token *,struct token *);
+extern void push_token(struct token *);
 extern void next_token(void);
 extern struct struct_declaration *add_sd(struct struct_declaration *,int);
 extern void add_sl(struct struct_declaration *,struct struct_list (*)[]);
